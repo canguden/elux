@@ -10,8 +10,20 @@ import { createStore } from "./core/signals";
 import { initElux } from "./core/index";
 import { print, printError } from "./core/utils";
 
+// Add HMR support
+const HMR_ENABLED = process.env.NODE_ENV !== "production";
+const HMR_DEBUG = false; // Set to true to show HMR debug panel
+
 // Import auto-generated routes
 import { routes } from "./routes";
+
+// Type definition for Vite's HMR API
+declare interface ImportMeta {
+  hot?: {
+    accept(callback?: (modules: any) => void): void;
+    dispose(callback: (data: any) => void): void;
+  };
+}
 
 // Global state for the application
 interface AppState {
@@ -75,39 +87,46 @@ async function initApp() {
   // Load routes into the router
   router.loadRoutes(routes);
 
+  // Setup HMR for development
+  if (HMR_ENABLED) {
+    setupHotModuleReplacement();
+  }
+
   // Function to fetch latest routes from server
   async function refreshRoutes() {
     try {
       const response = await fetch("/__elux/api/routes");
       if (!response.ok) throw new Error(`Server returned ${response.status}`);
-      
+
       const data = await response.json();
       const serverRoutes = data.routes as string[];
-      
+
       // Get current client routes
       const clientRoutes = Object.keys(routes);
-      
+
       // Check if we have new routes
-      const hasNewRoutes = serverRoutes.some(route => !clientRoutes.includes(route));
-      
+      const hasNewRoutes = serverRoutes.some(
+        (route) => !clientRoutes.includes(route)
+      );
+
       if (hasNewRoutes) {
         print("New routes detected, reloading page to update...");
         // Force reload to get new routes.ts
         window.location.reload();
       }
-      
+
       return !hasNewRoutes;
     } catch (error) {
       printError("Error refreshing routes:", error);
       return false;
     }
   }
-  
+
   // Check for route updates every 5 seconds in development
   if (process.env.NODE_ENV !== "production") {
     setInterval(refreshRoutes, 5000);
   }
-  
+
   // Add route refresh to window for debugging
   window.refreshEluxRoutes = refreshRoutes;
 
@@ -246,7 +265,9 @@ async function initApp() {
           // Try to refresh routes before navigation
           const refreshed = await refreshRoutes();
           if (!refreshed) {
-            print(`Route not found: ${normalizedPath}, but continuing anyway...`);
+            print(
+              `Route not found: ${normalizedPath}, but continuing anyway...`
+            );
           }
         } catch (error) {
           printError("Error checking routes:", error);
@@ -319,12 +340,79 @@ function setupCounterUpdateHandler() {
   print("Counter update handler initialized");
 }
 
-// Add type declarations for global variables
+// Setup Hot Module Replacement
+function setupHotModuleReplacement() {
+  print("Setting up HMR listeners");
+  
+  // Create debug panel for developer experience
+  const debugHmr = (message: string) => {
+    print(`[HMR] ${message}`);
+    // Add to debug console if exists
+    const debugConsole = document.getElementById('debug-panel');
+    if (debugConsole) {
+      const line = document.createElement('p');
+      line.className = 'debug-log';
+      line.innerHTML = `<span style="color:#00aaff">[HMR]</span> ${message}`;
+      debugConsole.appendChild(line);
+      debugConsole.scrollTop = debugConsole.scrollHeight;
+    }
+  };
+  
+  // Listen for Vite's HMR events
+  // @ts-ignore - Vite HMR API
+  if (import.meta.hot) {
+    // @ts-ignore - Vite HMR API
+    import.meta.hot.accept(() => {
+      debugHmr("Hot module update detected, refreshing...");
+      router.navigate(router.getCurrentPath());
+    });
+  }
+  
+  // Listen for server-sent custom events
+  const eventSource = new EventSource('/__elux-hmr');
+  
+  eventSource.addEventListener('open', () => {
+    debugHmr("HMR connection established");
+  });
+  
+  eventSource.addEventListener('elux:file-change', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      debugHmr(`File changed: ${data.file}, refreshing...`);
+      // Re-render the current route
+      router.navigate(router.getCurrentPath());
+    } catch (error) {
+      printError("Error handling HMR event:", error);
+      debugHmr(`Error: ${error}`);
+    }
+  });
+  
+  eventSource.addEventListener('error', () => {
+    debugHmr("HMR connection error, retrying...");
+    // Will automatically try to reconnect
+  });
+  
+  // Add to window for debugging
+  window.eluxHMR = {
+    refresh: () => router.navigate(router.getCurrentPath()),
+    eventSource,
+    forceRefresh: () => window.location.reload()
+  };
+  
+  debugHmr("HMR setup complete");
+}
+
+// Add debug tools to global interface
 declare global {
   interface Window {
     __INITIAL_DATA__?: Record<string, any>;
     updateCounterDisplay: (value: number) => void;
     refreshEluxRoutes: () => Promise<boolean>;
+    eluxHMR: {
+      refresh: () => void;
+      eventSource: EventSource;
+      forceRefresh: () => void;
+    };
   }
 }
 

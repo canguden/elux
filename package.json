@@ -7,11 +7,11 @@
   "type": "module",
   "scripts": {
     "dev": "set NODE_ENV=development && tsx --experimental-specifier-resolution=node server.ts",
+    "dev:hmr": "set NODE_ENV=development && tsx --watch --experimental-specifier-resolution=node server.ts",
     "build": "vite build",
     "start": "set NODE_ENV=production && node dist/server.js",
     "clean": "rimraf dist",
     "dev:vite": "vite",
-    "dev:hmr": "tsx --experimental-specifier-resolution=node --watch server.ts",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run"

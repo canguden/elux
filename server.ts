@@ -127,6 +127,7 @@ const requestTimer = (
 // Declare global namespace augmentation for vite
 declare global {
   var vite: any;
+  var sendHMREvent: (event: string, data: any) => void;
 }
 
 // Load a module dynamically
@@ -556,38 +557,86 @@ async function start() {
     // Generate routes from filesystem
     await generateRoutes();
 
-    // In development mode, watch for file changes to regenerate routes
-    if (DEV_MODE) {
-      const appDir = path.join(process.cwd(), "app");
-      let debounceTimer: NodeJS.Timeout | null = null;
-
-      // Simple file watcher for the app directory
-      fs.watch(appDir, { recursive: true }, async (_eventType, filename) => {
-        if (
-          filename &&
-          (filename.endsWith("page.tsx") || filename.includes("/"))
-        ) {
-          // Debounce to avoid multiple regenerations
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(async () => {
-            logger.info(
-              `File change detected: ${filename}, regenerating routes...`
-            );
-            await generateRoutes();
-          }, 500);
-        }
-      });
-
-      logger.info(`Watching ${appDir} for file changes...`);
-    }
-
     const app = express();
     let vite: any;
 
+    // In development mode, watch for file changes to regenerate routes
     if (DEV_MODE) {
+      const appDir = path.join(process.cwd(), "app");
+      const eluxDir = path.join(process.cwd(), "elux");
+      let debounceTimer: NodeJS.Timeout | null = null;
+
+      // Create a collection of connected SSE clients for HMR
+      const sseClients: Set<express.Response> = new Set();
+
+      // Global function to send HMR events to all clients
+      global.sendHMREvent = (event: string, data: any) => {
+        sseClients.forEach((client) => {
+          try {
+            client.write(`event: ${event}\n`);
+            client.write(`data: ${JSON.stringify(data)}\n\n`);
+          } catch (err) {
+            // Client might be disconnected, remove it
+            sseClients.delete(client);
+          }
+        });
+        logger.debug(`Sent HMR ${event} event to ${sseClients.size} clients`);
+      };
+
+      // Function to send file change event
+      const sendFileChangeEvent = (filename: string) => {
+        global.sendHMREvent("elux:file-change", { file: filename });
+      };
+
+      // Enhanced file watcher for the app directory
+      fs.watch(appDir, { recursive: true }, async (_eventType, filename) => {
+        if (!filename) return;
+
+        // Debounce to avoid multiple events
+        if (debounceTimer) clearTimeout(debounceTimer);
+
+        debounceTimer = setTimeout(async () => {
+          logger.info(
+            `File change detected: ${filename}, notifying clients...`
+          );
+
+          // Regenerate routes if needed
+          if (filename.endsWith("page.tsx") || filename.includes("/")) {
+            await generateRoutes();
+          }
+
+          // Notify clients
+          sendFileChangeEvent(filename);
+        }, 100);
+      });
+
+      // Watch framework files too
+      fs.watch(eluxDir, { recursive: true }, (_eventType, filename) => {
+        if (!filename) return;
+
+        if (debounceTimer) clearTimeout(debounceTimer);
+
+        debounceTimer = setTimeout(() => {
+          logger.info(
+            `Framework file changed: ${filename}, notifying clients...`
+          );
+          sendFileChangeEvent(filename);
+        }, 100);
+      });
+
+      logger.info(`Watching ${appDir} and ${eluxDir} for file changes...`);
+
       // Create Vite server in middleware mode
       vite = await createViteServer({
-        server: { middlewareMode: true },
+        server: {
+          middlewareMode: true,
+          hmr: {
+            protocol: "ws",
+            port: PORT,
+            overlay: true,
+            timeout: 1000,
+          },
+        },
         appType: "custom",
         optimizeDeps: {
           // Add dependencies to pre-bundle
@@ -605,6 +654,29 @@ async function start() {
 
       // Use vite's connect instance as middleware
       app.use(vite.middlewares);
+
+      // Add SSE endpoint for HMR
+      app.get("/__elux-hmr", (req, res) => {
+        // Configure SSE headers
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        // Add client to the collection
+        sseClients.add(res);
+
+        // Send initial connection message
+        res.write('data: {"connected":true}\n\n');
+        logger.info(`HMR client connected: ${req.ip}`);
+
+        // Handle client disconnect
+        req.on("close", () => {
+          sseClients.delete(res);
+          logger.info(`HMR client disconnected: ${req.ip}`);
+        });
+      });
+
+      logger.info("HMR server initialized");
     }
 
     // Log all requests for debugging

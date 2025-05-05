@@ -50,7 +50,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <div className="flex justify-center gap-4 mt-4 mb-10">
+      <div className="flex justify-center gap-4 mt-4 mb-4">
         <Link href="/about" className="btn btn-primary">
           About Us
         </Link>
