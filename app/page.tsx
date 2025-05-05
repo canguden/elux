@@ -1,4 +1,4 @@
-/** @jsx h */
+
 import { h } from "../elux/core/vdom";
 import { Link } from "../elux/Link";
 import { SSRContext } from "../elux/core";

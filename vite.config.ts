@@ -10,6 +10,9 @@ function eluxFileRouterPlugin(): Plugin {
   // Store references to methods outside of plugin scope
   let scanAndGenerateRoutes: () => Promise<void>;
 
+  // Check verbose logging mode
+  const VERBOSE_LOGGING = process.env.VERBOSE_LOGGING === "true";
+
   return {
     name: "elux-file-router",
     enforce: "pre",
@@ -20,7 +23,10 @@ function eluxFileRouterPlugin(): Plugin {
     configureServer(server) {
       // Define the function to scan and generate routes
       scanAndGenerateRoutes = async () => {
-        console.log("🔍 Scanning for routes in app directory...");
+        // Only log in verbose mode
+        if (VERBOSE_LOGGING) {
+          console.log("🔍 Scanning for routes in app directory...");
+        }
 
         try {
           // Find all page.tsx files in the app directory
@@ -39,7 +45,11 @@ function eluxFileRouterPlugin(): Plugin {
             const importPath = `/${page.replace(/\.(tsx|ts|jsx|js)$/, "")}`;
 
             routes[routePath] = importPath;
-            console.log(`📄 Route: ${routePath} -> ${importPath}`);
+
+            // Only log in verbose mode
+            if (VERBOSE_LOGGING) {
+              console.log(`📄 Route: ${routePath} -> ${importPath}`);
+            }
           }
 
           // Generate the routes file
@@ -54,7 +64,13 @@ ${Object.entries(routes)
           // Ensure the directory exists
           const routesFilePath = resolve("elux/routes.ts");
           fs.writeFileSync(routesFilePath, file);
-          console.log(`✅ Routes generated at ${routesFilePath}`);
+
+          // Only log in verbose mode
+          if (VERBOSE_LOGGING) {
+            console.log(`✅ Routes generated at ${routesFilePath}`);
+          } else {
+            process.stdout.write(".");
+          }
         } catch (error) {
           console.error("❌ Error generating routes:", error);
         }

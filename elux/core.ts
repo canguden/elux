@@ -81,8 +81,9 @@ export async function renderToString(component: VNode): Promise<string> {
   // Import VNodeType enum if not already available
   const { VNodeType } = await import("./core/vdom");
 
-  // Debug logging function
+  // Debug logging function - now private and not called in production
   const debugVNode = (node: any, depth = 0): void => {
+    // This function is kept for potential future debugging needs but isn't called
     if (!node) return;
     console.log(
       " ".repeat(depth * 2) +
@@ -251,23 +252,12 @@ export async function renderToString(component: VNode): Promise<string> {
   }
 
   try {
-    // Debug output in development mode
-    if (process.env.NODE_ENV !== "production") {
-      console.log(
-        "Rendering component to string:",
-        component.type,
-        component.tag?.name || component.tag
-      );
-      debugVNode(component);
-    }
-
+    // No verbose logging in any environment - keeping terminal clean
     const result = stringifyNode(component);
 
-    // Debug the result
+    // Just log a brief message without the HTML content
     if (process.env.NODE_ENV !== "production") {
-      console.log(
-        `Rendered HTML (${result.length} chars): ${result.substring(0, 100)}...`
-      );
+      console.log(`Rendered HTML (${result.length} chars)`);
     }
 
     return result;

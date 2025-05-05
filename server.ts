@@ -14,6 +14,7 @@ dotenv.config();
 // Get port from environment or use default
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const DEV_MODE = process.env.NODE_ENV !== "production";
+const VERBOSE_LOGGING = process.env.VERBOSE_LOGGING === "true";
 
 // Console logging utilities with emojis
 const logger = {
@@ -21,8 +22,7 @@ const logger = {
   success: (message: string) => console.log(`${chalk.green("✅")} ${message}`),
   warning: (message: string) => console.log(`${chalk.yellow("⚠️")} ${message}`),
   error: (message: string) => console.log(`${chalk.red("❌")} ${message}`),
-  debug: (message: string) =>
-    DEV_MODE && console.log(`${chalk.gray("🔍")} ${message}`),
+  debug: (message: string) => false, // Disable debug logging completely
   route: (method: string, url: string) =>
     DEV_MODE &&
     console.log(`${chalk.magenta("🔌")} ${chalk.bold(method)} ${url}`),
@@ -31,7 +31,6 @@ const logger = {
 // Scan app directory and generate routes dynamically
 async function generateRoutes() {
   const appDir = path.join(process.cwd(), "app");
-  logger.info("Scanning app directory for routes...");
 
   // Hold all discovered routes
   const routes: Record<string, string> = {
@@ -56,7 +55,7 @@ async function generateRoutes() {
           /\\/g,
           "/"
         );
-        logger.debug(`Found route: ${routePath} -> ${routes[routePath]}`);
+        // Completely eliminate debug logs for routes
       }
 
       // Recursively scan subdirectories
@@ -101,8 +100,8 @@ ${Object.entries(routes)
     path.join(process.cwd(), "elux", "routes.ts"),
     routesFileContent
   );
-  logger.success(`Generated ${Object.keys(routes).length} routes`);
 
+  // Keep the terminal clean - no logs at all for route generation
   return routes;
 }
 
@@ -113,13 +112,25 @@ const requestTimer = (
   next: express.NextFunction
 ) => {
   if (DEV_MODE) {
-    const start = Date.now();
-    res.on("finish", () => {
-      const duration = Date.now() - start;
-      const color =
-        duration < 50 ? chalk.green : duration < 200 ? chalk.yellow : chalk.red;
-      logger.debug(`${req.method} ${req.url} - ${color(duration + "ms")}`);
-    });
+    // Filter out frequent polling requests from timing logs
+    const shouldSkipLogging =
+      req.url.includes("/__elux/api/routes") ||
+      req.url.includes("/.well-known/appspecific") ||
+      req.url.includes("/favicon.ico");
+
+    if (!shouldSkipLogging) {
+      const start = Date.now();
+      res.on("finish", () => {
+        const duration = Date.now() - start;
+        const color =
+          duration < 50
+            ? chalk.green
+            : duration < 200
+            ? chalk.yellow
+            : chalk.red;
+        logger.debug(`${req.method} ${req.url} - ${color(duration + "ms")}`);
+      });
+    }
   }
   next();
 };
@@ -596,7 +607,7 @@ async function start() {
         if (debounceTimer) clearTimeout(debounceTimer);
 
         debounceTimer = setTimeout(async () => {
-          logger.info(`File change detected: ${filename}, refreshing...`);
+          // Completely silent operation - no logging
 
           // Regenerate routes if needed
           if (filename.endsWith("page.tsx") || filename.includes("/")) {
@@ -610,7 +621,7 @@ async function start() {
               vite.ws.send({
                 type: "full-reload",
               });
-              logger.info("Sent full-reload signal to clients");
+              // No logging - keep it silent
             } else {
               // For other files, try module update
               vite.ws.send({
@@ -623,7 +634,7 @@ async function start() {
                   },
                 ],
               });
-              logger.info(`Sent module update for: ${filename}`);
+              // No logging - keep it silent
             }
           }
         }, 100);
@@ -636,25 +647,34 @@ async function start() {
         if (debounceTimer) clearTimeout(debounceTimer);
 
         debounceTimer = setTimeout(() => {
-          logger.info(`Framework file changed: ${filename}, refreshing...`);
+          // No logging - keep it silent
 
           // For framework changes, always do a full reload
           if (vite && vite.ws) {
             vite.ws.send({
               type: "full-reload",
             });
-            logger.info("Sent full-reload signal to clients");
+            // No logging - keep it silent
           }
         }, 100);
       });
 
-      logger.info(`Watching ${appDir} and ${eluxDir} for file changes...`);
+      // Simplified logging message with no verbose mode references
+      logger.info(`File watching enabled.`);
     }
 
-    // Log all requests for debugging
+    // Log all requests for debugging, but filter out route polling
     app.use(requestTimer);
     app.use((req, _res, next) => {
-      logger.route(req.method, req.url);
+      // Filter out frequent polling requests from logging
+      const shouldSkipLogging =
+        req.url.includes("/__elux/api/routes") ||
+        req.url.includes("/.well-known/appspecific") ||
+        req.url.includes("/favicon.ico");
+
+      if (!shouldSkipLogging) {
+        logger.route(req.method, req.url);
+      }
       next();
     });
 
@@ -823,18 +843,26 @@ async function start() {
 
     // Start the server
     app.listen(PORT, () => {
+      // Ultra clean display - just the basics
+      console.log("\n");
+      console.log(`${chalk.bold("ELUX Framework")}`);
+      const separator = "─".repeat(30);
+      console.log(chalk.dim(separator));
+
       logger.success(
-        `Elux server running at ${chalk.blue(`http://localhost:${PORT}`)}`
-      );
-      logger.info(
-        `Environment: ${chalk.bold(DEV_MODE ? "development" : "production")}`
+        `Server running at ${chalk.blue(`http://localhost:${PORT}`)}`
       );
 
       if (DEV_MODE) {
-        logger.info(
-          `Dev inspector: ${chalk.blue(`http://localhost:${PORT}/__elux`)}`
+        console.log(chalk.dim(`${separator}\n`));
+        console.log(`${chalk.yellow("⚡")} Development mode active`);
+        console.log(`${chalk.cyan("🔄")} File watching enabled`);
+        console.log(
+          `${chalk.magenta("🛠️")} Dev tools: ${chalk.blue(
+            `http://localhost:${PORT}/__elux`
+          )}`
         );
-        logger.info(`Press ${chalk.bold("Ctrl+C")} to stop`);
+        console.log(`\nPress ${chalk.bold("Ctrl+C")} to stop\n`);
       }
     });
   } catch (error) {

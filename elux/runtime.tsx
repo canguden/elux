@@ -124,7 +124,8 @@ async function initApp() {
 
   // Check for route updates every 5 seconds in development
   if (process.env.NODE_ENV !== "production") {
-    setInterval(refreshRoutes, 5000);
+    // Reduce polling frequency to every 10 seconds to minimize console noise
+    setInterval(refreshRoutes, 10000);
   }
 
   // Add route refresh to window for debugging
@@ -343,26 +344,26 @@ function setupCounterUpdateHandler() {
 // Setup Hot Module Replacement
 function setupHotModuleReplacement() {
   print("Setting up HMR listeners");
-  
+
   // Create debug panel for developer experience
   const debugHmr = (message: string) => {
     print(`[HMR] ${message}`);
     // Add to debug console if exists
-    const debugConsole = document.getElementById('debug-panel');
+    const debugConsole = document.getElementById("debug-panel");
     if (debugConsole) {
-      const line = document.createElement('p');
-      line.className = 'debug-log';
+      const line = document.createElement("p");
+      line.className = "debug-log";
       line.innerHTML = `<span style="color:#00aaff">[HMR]</span> ${message}`;
       debugConsole.appendChild(line);
       debugConsole.scrollTop = debugConsole.scrollHeight;
     }
   };
-  
+
   // Listen for Vite's HMR events
   // @ts-ignore - Vite HMR API
   if (import.meta.hot) {
     debugHmr("HMR enabled");
-    
+
     // @ts-ignore - Vite HMR API
     import.meta.hot.accept(() => {
       debugHmr("Hot module update detected, refreshing...");
@@ -371,13 +372,13 @@ function setupHotModuleReplacement() {
   } else {
     debugHmr("HMR not available - page will reload on changes");
   }
-  
+
   // Add to window for debugging and manual refreshing
   window.eluxHMR = {
     refresh: () => router.navigate(router.getCurrentPath()),
-    forceRefresh: () => window.location.reload()
+    forceRefresh: () => window.location.reload(),
   };
-  
+
   debugHmr("HMR setup complete");
 }
 
