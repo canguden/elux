@@ -26,7 +26,7 @@ export default function HomePage() {
 
       <section className="mb-4">
         <div className="card card-default">
-          <h3 className="card-title">Welcome to Elux</h3>
+          <h3 className="card-title">Welcome to Elux Framework 1.0</h3>
           <p>A lightweight framework with custom VDOM implementation</p>
         </div>
 

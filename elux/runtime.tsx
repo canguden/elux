@@ -361,41 +361,20 @@ function setupHotModuleReplacement() {
   // Listen for Vite's HMR events
   // @ts-ignore - Vite HMR API
   if (import.meta.hot) {
+    debugHmr("HMR enabled");
+    
     // @ts-ignore - Vite HMR API
     import.meta.hot.accept(() => {
       debugHmr("Hot module update detected, refreshing...");
       router.navigate(router.getCurrentPath());
     });
+  } else {
+    debugHmr("HMR not available - page will reload on changes");
   }
   
-  // Listen for server-sent custom events
-  const eventSource = new EventSource('/__elux-hmr');
-  
-  eventSource.addEventListener('open', () => {
-    debugHmr("HMR connection established");
-  });
-  
-  eventSource.addEventListener('elux:file-change', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      debugHmr(`File changed: ${data.file}, refreshing...`);
-      // Re-render the current route
-      router.navigate(router.getCurrentPath());
-    } catch (error) {
-      printError("Error handling HMR event:", error);
-      debugHmr(`Error: ${error}`);
-    }
-  });
-  
-  eventSource.addEventListener('error', () => {
-    debugHmr("HMR connection error, retrying...");
-    // Will automatically try to reconnect
-  });
-  
-  // Add to window for debugging
+  // Add to window for debugging and manual refreshing
   window.eluxHMR = {
     refresh: () => router.navigate(router.getCurrentPath()),
-    eventSource,
     forceRefresh: () => window.location.reload()
   };
   
@@ -410,7 +389,6 @@ declare global {
     refreshEluxRoutes: () => Promise<boolean>;
     eluxHMR: {
       refresh: () => void;
-      eventSource: EventSource;
       forceRefresh: () => void;
     };
   }
