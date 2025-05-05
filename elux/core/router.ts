@@ -3,8 +3,6 @@
  * Handles automatic routing based on the filesystem with dynamic routes
  */
 
-import { VNode } from "./vdom";
-
 // Types
 export type RouteParams = Record<string, string>;
 export type RouteLoader = () => Promise<any>;

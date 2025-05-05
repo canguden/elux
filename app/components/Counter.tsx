@@ -1,5 +1,6 @@
 import { h } from "../../elux/core/vdom";
 import { eState } from "../../elux/core/context";
+import { print } from "../../elux/core/utils";
 
 interface CounterProps {
   initialCount?: number;
@@ -22,7 +23,7 @@ export function Counter({ initialCount = 0, label = "Count" }: CounterProps) {
     setCount(newCount);
 
     // Log the increment
-    console.log("Counter incremented:", newCount);
+    print("Counter incremented:", newCount);
   };
 
   return (

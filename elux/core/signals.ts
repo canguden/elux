@@ -5,6 +5,7 @@
 
 // Import the renderer's component tracking function
 import { getCurrentComponent, reRenderComponent } from "../client/renderer";
+import { print, printError } from "../core/utils";
 
 // Type definitions
 type Subscriber = () => void;
@@ -73,7 +74,7 @@ export class Signal<T> {
 
     // Update the value first
     this.value = newValue;
-    
+
     // Then notify all subscribers about the change
     this.notify();
   }
@@ -97,20 +98,20 @@ export class Signal<T> {
 
     // Trigger re-renders for component subscribers
     if (this.components.size > 0) {
-      console.log(
-        `[Signal] Notifying ${this.components.size} components about signal change`
-      );
-      
+      print(`Notifying ${this.components.size} components about signal change`);
+
       // Copy the components set to avoid modification during iteration
       const componentsToUpdate = Array.from(this.components);
-      
+
       // Trigger re-render for each component
       for (const component of componentsToUpdate) {
-        console.log(`[Signal] Triggering re-render for component: ${component.name || 'Component'}`);
+        print(
+          `Triggering re-render for component: ${component.name || "Component"}`
+        );
         try {
           reRenderComponent(component);
         } catch (error) {
-          console.error(`[Signal] Error re-rendering component:`, error);
+          printError(`Error re-rendering component:`, error);
         }
       }
     }
@@ -128,7 +129,7 @@ export class Signal<T> {
    */
   unsubscribeComponent(component: Function): void {
     this.components.delete(component);
-    
+
     // Also cleanup the component subscriptions map
     if (componentSubscriptions.has(component)) {
       const subscription = componentSubscriptions.get(component);

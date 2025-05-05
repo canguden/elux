@@ -1,4 +1,6 @@
 // Virtual DOM node types
+import { print, printError, printWarn } from "../core/utils";
+
 export enum VNodeType {
   TEXT,
   ELEMENT,
@@ -40,47 +42,51 @@ export function getCurrentComponent(): Function | null {
 
 // Trigger component re-render from signal system
 export function reRenderComponent(component: Function): void {
-  console.log(`[Renderer] Re-rendering component due to signal change: ${component.name || 'Component'}`);
-  
+  print(
+    `Re-rendering component due to signal change: ${
+      component.name || "Component"
+    }`
+  );
+
   const data = componentVNodeMap.get(component);
   if (data) {
     const { vnode, container, index } = data;
-    
+
     // Create a new VNode with same props
-    console.log(`[Renderer] Creating new VNode for component with props:`, vnode.props);
+    print(`Creating new VNode for component with props:`, vnode.props);
     const newVNode = createComponent(component, vnode.props || {});
-    
+
     // Store the new VNode in place of the old one
     componentVNodeMap.set(component, {
       vnode: newVNode,
       container,
-      index
+      index,
     });
-    
+
     try {
       // Set current component being rendered
       const prevComponent = currentComponent;
       currentComponent = component;
-      
+
       // Execute component with the same props to get fresh output
       const renderedOutput = component(vnode.props || {});
-      
+
       // Reset current component
       currentComponent = prevComponent;
-      
+
       // Now create a DOM element from the rendered output
       const newElement = createDOMElement(renderedOutput);
-      console.log(`[Renderer] Created new DOM element:`, newElement);
-      
+      print(`Created new DOM element:`, newElement);
+
       // Find the existing element in the DOM
       if (vnode._el && vnode._el.parentElement) {
-        console.log(`[Renderer] Replacing existing element in DOM`);
+        print(`Replacing existing element in DOM`);
         vnode._el.parentElement.replaceChild(newElement, vnode._el);
-        
+
         // Update element reference
         newVNode._el = newElement;
       } else if (container) {
-        console.log(`[Renderer] Appending new element to container`);
+        print(`Appending new element to container`);
         // Clear container at index
         const oldElement = container.children[index];
         if (oldElement) {
@@ -88,41 +94,44 @@ export function reRenderComponent(component: Function): void {
         } else {
           container.appendChild(newElement);
         }
-        
+
         // Update element reference
         newVNode._el = newElement;
       }
-      
-      console.log(`[Renderer] Component re-rendered successfully`);
+
+      print(`Component re-rendered successfully`);
     } catch (error) {
-      console.error(`[Renderer] Error during component re-render:`, error);
+      printError(`Error during component re-render:`, error);
     }
   } else {
-    console.warn(`[Renderer] No component data found for re-render:`, component.name);
-    
+    printWarn(`No component data found for re-render:`, component.name);
+
     // Attempt to find any existing component in the DOM with the same name
-    if (typeof document !== 'undefined') {
-      const possibleElements = document.querySelectorAll('.card-default');
+    if (typeof document !== "undefined") {
+      const possibleElements = document.querySelectorAll(".card-default");
       if (possibleElements.length > 0) {
-        console.log(`[Renderer] Found ${possibleElements.length} possible elements to refresh`);
-        
+        print(`Found ${possibleElements.length} possible elements to refresh`);
+
         // Re-render the component with empty props as fallback
         try {
           const prevComponent = currentComponent;
           currentComponent = component;
-          
+
           const renderedOutput = component({});
           currentComponent = prevComponent;
-          
+
           const newElement = createDOMElement(renderedOutput);
-          
+
           // Try to replace the first matching element
           if (possibleElements[0].parentElement) {
-            possibleElements[0].parentElement.replaceChild(newElement, possibleElements[0]);
-            console.log(`[Renderer] Replaced element as fallback`);
+            possibleElements[0].parentElement.replaceChild(
+              newElement,
+              possibleElements[0]
+            );
+            print(`Replaced element as fallback`);
           }
         } catch (fallbackError) {
-          console.error(`[Renderer] Fallback re-render failed:`, fallbackError);
+          printError(`Fallback re-render failed:`, fallbackError);
         }
       }
     }
@@ -200,7 +209,7 @@ export const Fragment = Symbol("Fragment");
 function createDOMElement(vnode: VNode): Element | Text {
   // Add check for undefined or null vnode
   if (!vnode) {
-    console.error("Attempted to render undefined or null vnode");
+    printError("Attempted to render undefined or null vnode");
     const errorEl = document.createElement("div");
     errorEl.className = "elux-error";
     errorEl.style.padding = "10px";
@@ -316,7 +325,7 @@ function createDOMElement(vnode: VNode): Element | Text {
       errorEl.appendChild(errorTitle);
       errorEl.appendChild(errorMessage);
 
-      console.error(`Error rendering component <${componentName}>:`, error);
+      printError(`Error rendering component <${componentName}>:`, error);
 
       return errorEl;
     }
@@ -488,7 +497,7 @@ function patchDOM(
 
 // Mount a VNode to a DOM element
 export function mount(vnode: VNode, container: Element | string): void {
-  console.log("[Renderer] Mount called with:", { vnode, container });
+  print("[Renderer] Mount called with:", { vnode, container });
 
   const containerElement =
     typeof container === "string"
@@ -496,14 +505,14 @@ export function mount(vnode: VNode, container: Element | string): void {
       : container;
 
   if (!containerElement) {
-    console.error(`[Renderer] Container not found: ${container}`);
+    printError(`[Renderer] Container not found: ${container}`);
     throw new Error(`Container not found: ${container}`);
   }
 
   try {
-    console.log("[Renderer] Creating DOM element from vnode");
+    print("[Renderer] Creating DOM element from vnode");
     const domElement = createDOMElement(vnode);
-    console.log("[Renderer] DOM element created:", domElement);
+    print("[Renderer] DOM element created:", domElement);
 
     containerElement.innerHTML = "";
     containerElement.appendChild(domElement);
@@ -518,9 +527,9 @@ export function mount(vnode: VNode, container: Element | string): void {
       });
     }
 
-    console.log("[Renderer] DOM element appended to container");
+    print("[Renderer] DOM element appended to container");
   } catch (error) {
-    console.error("[Renderer] Error mounting component:", error);
+    printError("[Renderer] Error mounting component:", error);
     containerElement.innerHTML = `<div class="error">Error: ${
       error instanceof Error ? error.message : String(error)
     }</div>`;
@@ -551,7 +560,7 @@ export function h(
   props: Record<string, any> | null,
   ...children: (VNode | string | null | undefined)[]
 ): VNode {
-  console.log("[Renderer] h function called with:", { tag, props, children });
+  print("[Renderer] h function called with:", { tag, props, children });
 
   // Handle fragment
   if (tag === Fragment) {
@@ -579,7 +588,7 @@ export function h(
       ? createComponent(tag, props, ...flattenedChildren)
       : createElement(tag as string, props, ...flattenedChildren);
 
-  console.log("[Renderer] h function returning:", result);
+  print("[Renderer] h function returning:", result);
   return result;
 }
 

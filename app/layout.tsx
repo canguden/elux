@@ -17,7 +17,7 @@ export default function RootLayout({ children }: LayoutProps) {
 }
 
 // Get shared data for layout
-export async function getLayoutProps(context: SSRContext) {
+export async function getLayoutProps(_context: SSRContext) {
   return {
     props: {
       nav: [

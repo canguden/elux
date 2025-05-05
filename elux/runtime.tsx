@@ -8,6 +8,7 @@ import { h, render } from "./core/vdom";
 import { router } from "./core/router";
 import { createStore } from "./core/signals";
 import { initElux } from "./core/index";
+import { print, printError } from "./core/utils";
 
 // Import auto-generated routes
 import { routes } from "./routes";
@@ -51,12 +52,12 @@ async function initApp() {
   // Initialize the framework
   initElux();
 
-  console.log("[Runtime] Initializing application");
+  print("Initializing application");
 
   // Get the app container
   const container = document.getElementById("app");
   if (!container) {
-    console.error("[Runtime] App container not found");
+    printError("App container not found");
     return;
   }
 
@@ -79,7 +80,7 @@ async function initApp() {
     try {
       // Get the current path
       const path = router.getCurrentPath();
-      console.log(`[Runtime] Rendering route: ${path}`);
+      print(`Rendering route: ${path}`);
 
       // Match the route
       const { route, params } = router.match(path);
@@ -103,9 +104,9 @@ async function initApp() {
       // Update state
       appState.setState({ isLoading: false, currentPath: path });
 
-      console.log(`[Runtime] Route rendered: ${path}`);
+      print(`Route rendered: ${path}`);
     } catch (error) {
-      console.error("[Runtime] Error rendering route:", error);
+      printError("Error rendering route:", error);
 
       // Update state
       appState.setState({
@@ -129,7 +130,7 @@ async function initApp() {
   window.EluxLink = (props: {
     href: string;
     children: any;
-    className?: string;
+    className?: string | undefined;
     [key: string]: any;
   }) => {
     const { href, children, className, ...rest } = props;
@@ -212,7 +213,7 @@ function setupCounterUpdateHandler() {
     }
   };
 
-  console.log("[Runtime] Counter update handler initialized");
+  print("Counter update handler initialized");
 }
 
 // Initialize when the DOM is ready
@@ -224,15 +225,5 @@ if (typeof window !== "undefined") {
   }
 }
 
-// Define global interface
-declare global {
-  interface Window {
-    EluxLink: (props: {
-      href: string;
-      children: any;
-      className?: string;
-      [key: string]: any;
-    }) => Element;
-    updateCounterDisplay: (value: number) => void;
-  }
-}
+// Note: Global type declarations for Window.EluxLink and updateCounterDisplay
+// are handled in a separate .d.ts file to avoid conflicts

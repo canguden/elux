@@ -66,12 +66,22 @@ export function jsx(
       children: processedChildren,
     };
   } else {
-    return {
-      type: VNodeType.ELEMENT,
-      tag: type,
-      props: props || {},
-      children: processedChildren,
-    };
+    if (typeof type === "symbol" && type !== Fragment) {
+      // Convert symbol to string representation for non-Fragment symbols
+      return {
+        type: VNodeType.ELEMENT,
+        tag: String(type),
+        props: props || {},
+        children: processedChildren,
+      };
+    } else {
+      return {
+        type: VNodeType.ELEMENT,
+        tag: typeof type === "string" ? type : undefined, // Only use string types
+        props: props || {},
+        children: processedChildren,
+      };
+    }
   }
 }
 

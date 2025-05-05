@@ -5,6 +5,7 @@
 
 import { Signal, createSignal } from "./signals";
 import { getCurrentComponent, reRenderComponent } from "../client/renderer";
+import { print, printError } from "./utils";
 
 // Global store for all context values
 const globalStore: Record<string, Signal<any>> = {};
@@ -83,14 +84,12 @@ export function eState<T>(
       // Also try to manually re-render any components registered for this key
       const components = componentRefs.get(key) || [];
       components.forEach((component) => {
-        console.log(
-          `[Context] Manually triggering re-render for ${key} component`
-        );
+        print(`Manually triggering re-render for ${key} component`);
         setTimeout(() => {
           try {
             reRenderComponent(component);
           } catch (e) {
-            console.error("[Context] Error re-rendering component:", e);
+            printError("Error re-rendering component:", e);
           }
         }, 0);
       });
@@ -183,6 +182,6 @@ if (typeof window !== "undefined") {
   (window as any).debugUpdateCount = (value: number) => {
     const [getCount, setCount] = eState("count");
     setCount(value);
-    console.log("[Debug] Count updated manually to:", value);
+    print("[Debug] Count updated manually to:", value);
   };
 }
