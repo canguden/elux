@@ -1,5 +1,5 @@
 import { h } from "../../elux/core/vdom";
-import { eState } from "../../elux/core/context";
+import { eState, eFx } from "../../elux/core/context";
 import { print } from "../../elux/core/utils";
 
 interface CounterProps {
@@ -13,6 +13,25 @@ export function Counter({ initialCount = 0, label = "Count" }: CounterProps) {
 
   // Get the current count value - this creates a dependency
   const currentCount = getCount();
+
+  // Use eFx to run side effects when count changes
+  eFx(() => {
+    // Log to console when count changes
+    print(`Counter value changed to: ${getCount()}`);
+
+    // Set document title with current count
+    if (typeof document !== "undefined") {
+      document.title = `${label}: ${getCount()}`;
+    }
+
+    // Cleanup function when component unmounts or before next effect run
+    return () => {
+      print("Cleaning up previous counter effect");
+      if (typeof document !== "undefined") {
+        document.title = "Elux App";
+      }
+    };
+  });
 
   // Function to increment counter that directly updates DOM as well
   const increment = () => {

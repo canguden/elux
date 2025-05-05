@@ -6,11 +6,6 @@ import { Counter } from "./components/Counter";
 import { eState } from "../elux/core/context";
 
 // Define the type for our page props
-interface HomePageProps {
-  title: string;
-  description: string;
-  count: number;
-}
 
 // Home page component that gets data automatically from context
 export default function HomePage() {
@@ -18,7 +13,7 @@ export default function HomePage() {
   const [getTitle] = eState<string>("title", "Elux Framework");
   const [getDescription] = eState<string>(
     "description",
-    "A fully Hackable framework from scratch"
+    "Built from scratch to set you free — Elux is a fully hackable, transparent framework made by developers, for developers. No black boxes. No limits. Just pure control and creativity."
   );
   const [getCount] = eState<number>("count", 0);
 
@@ -55,12 +50,15 @@ export default function HomePage() {
         </div>
       </section>
 
-      <div className="flex justify-center gap-4 mt-4">
+      <div className="flex justify-center gap-4 mt-4 mb-10">
         <Link href="/about" className="btn btn-primary">
           About Us
         </Link>
         <Link href="/docs" className="btn btn-outline">
           Documentation
+        </Link>
+        <Link href="/test" className="btn btn-outline">
+          Test
         </Link>
       </div>
     </div>

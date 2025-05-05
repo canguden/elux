@@ -90,7 +90,17 @@ export class Router {
 
     // Return the not found route if no match
     if (this.notFoundRoute) {
+      console.log(`No route found for ${url}, using notFound route`);
       return { route: this.notFoundRoute, params: {} };
+    }
+
+    // Try to use a default fallback for common routes like /about, /contact, etc.
+    for (const route of this.routes) {
+      // If we have a home route, use it as fallback
+      if (route.path === "/" || route.path === "*") {
+        console.warn(`No route found for ${url} and no notFound route set. Using ${route.path} as fallback.`);
+        return { route, params: {} };
+      }
     }
 
     throw new Error(`No route found for ${url} and no notFound route set`);

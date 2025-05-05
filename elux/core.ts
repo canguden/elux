@@ -77,18 +77,41 @@ function createDefaultTemplate(
 }
 
 // Render a component to HTML string
-async function renderToString(component: VNode): Promise<string> {
+export async function renderToString(component: VNode): Promise<string> {
+  // Import VNodeType enum if not already available
+  const { VNodeType } = await import("./core/vdom");
+
+  // Debug logging function
+  const debugVNode = (node: any, depth = 0): void => {
+    if (!node) return;
+    console.log(
+      " ".repeat(depth * 2) +
+        `Type: ${node.type}, Tag: ${node.tag?.name || node.tag || "none"}`
+    );
+    if (node.children?.length) {
+      console.log(" ".repeat(depth * 2) + "Children:");
+      node.children.forEach((child: any) => debugVNode(child, depth + 1));
+    }
+  };
+
   // Simple string renderer for demonstration
   // In a real implementation, this would traverse the virtual DOM
   function stringifyNode(node: VNode): string {
-    if (!node) return "";
-
-    if (node.type === 0) {
-      // TEXT
-      return node.text || "";
+    // Check for undefined or non-object
+    if (!node || typeof node !== "object") {
+      console.error("Invalid node:", node);
+      return "";
     }
 
-    if (node.type === 1) {
+    // Handle numeric type values (important!)
+    if (node.type === 0 || node.type === VNodeType.TEXT) {
+      // TEXT
+      return node.text
+        ? String(node.text).replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        : "";
+    }
+
+    if (node.type === 1 || node.type === VNodeType.ELEMENT) {
       // ELEMENT
       const tag = node.tag as string;
       const attrs = node.props
@@ -99,7 +122,11 @@ async function renderToString(component: VNode): Promise<string> {
               if (typeof value === "boolean") {
                 return value ? key : "";
               }
-              return `${key}="${value}"`;
+              // Properly escape attribute values
+              return `${key}="${String(value)
+                .replace(/"/g, "&quot;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")}"`;
             })
             .filter(Boolean)
             .join(" ")
@@ -115,26 +142,139 @@ async function renderToString(component: VNode): Promise<string> {
         return `<${tag}${attrsStr}></${tag}>`;
       }
 
-      const childrenStr = node.children.map(stringifyNode).join("");
+      // Recursively process and join children
+      let childrenStr = "";
+      if (Array.isArray(node.children)) {
+        childrenStr = node.children
+          .map((child) => stringifyNode(child))
+          .join("");
+      }
 
       return `<${tag}${attrsStr}>${childrenStr}</${tag}>`;
     }
 
-    if (node.type === 2) {
-      // COMPONENT
-      // This is simplified; real implementation would need to handle component rendering
-      return "Component rendering not implemented";
+    if (node.type === 2 || node.type === VNodeType.COMPONENT) {
+      try {
+        // Handle Link component specially
+        if (
+          typeof node.tag === "function" &&
+          (node.tag.name === "Link" ||
+            (node.props?.href !== undefined &&
+              typeof node.props?.onClick === "function"))
+        ) {
+          const href = node.props?.href || "/";
+          const className = node.props?.className || "";
+
+          // Process child content
+          let childContent = "";
+          if (node.children && node.children.length > 0) {
+            childContent = node.children.map(stringifyNode).join("");
+          } else if (node.props?.children) {
+            // Handle children passed via props
+            const childProps = Array.isArray(node.props.children)
+              ? node.props.children
+              : [node.props.children];
+
+            childContent = childProps
+              .map((child: any) =>
+                typeof child === "string" ? child : stringifyNode(child)
+              )
+              .join("");
+          }
+
+          return `<a href="${href}" class="${className}">${childContent}</a>`;
+        }
+
+        // For non-link components, run the component function to get its VDOM output
+        if (typeof node.tag === "function") {
+          try {
+            // Invoke the component function with props
+            const result = node.tag(node.props || {});
+
+            // Check if result is a valid VDOM node
+            if (
+              result &&
+              typeof result === "object" &&
+              (result.type !== undefined || result.tag !== undefined)
+            ) {
+              return stringifyNode(result);
+            } else if (result === null || result === undefined) {
+              return ""; // Components that return nothing
+            } else if (
+              typeof result === "string" ||
+              typeof result === "number"
+            ) {
+              return String(result); // Components that return primitives
+            } else {
+              console.warn("Component returned non-VDOM result:", result);
+              return JSON.stringify(result);
+            }
+          } catch (compError) {
+            console.error(
+              `Error invoking component ${node.tag.name || "anonymous"}:`,
+              compError
+            );
+            return `<!-- Component Error: ${compError.message} -->`;
+          }
+        }
+
+        // For other components or fallback, just render children
+        if (node.children && node.children.length > 0) {
+          return node.children.map(stringifyNode).join("");
+        }
+
+        console.warn("Component rendering fallback for:", node.tag);
+        return ""; // Empty string for unrenderable components
+      } catch (error) {
+        console.error("Error rendering component:", error);
+        return `<div class="error">Component Error: ${error.message}</div>`;
+      }
     }
 
-    if (node.type === 3) {
-      // FRAGMENT
+    if (node.type === 3 || node.type === VNodeType.FRAGMENT) {
+      // FRAGMENT - render children without a wrapper
       return node.children ? node.children.map(stringifyNode).join("") : "";
     }
 
+    console.error("Unknown node type:", node);
     return "";
   }
 
-  return stringifyNode(component);
+  // Check for non-VDOM object (object without proper type field)
+  if (
+    !component ||
+    typeof component !== "object" ||
+    (component.type === undefined && !component.tag && !component.children)
+  ) {
+    console.error("Invalid component passed to renderToString:", component);
+    return JSON.stringify(component, null, 2);
+  }
+
+  try {
+    // Debug output in development mode
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        "Rendering component to string:",
+        component.type,
+        component.tag?.name || component.tag
+      );
+      debugVNode(component);
+    }
+
+    const result = stringifyNode(component);
+
+    // Debug the result
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `Rendered HTML (${result.length} chars): ${result.substring(0, 100)}...`
+      );
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Error in renderToString:", error);
+    return `<div class="error">Error rendering component: ${error.message}</div>`;
+  }
 }
 
 // Create an Express server for SSR

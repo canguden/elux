@@ -6,10 +6,10 @@ import { eState } from "../../elux/core/context";
 // About page component
 export default function AboutPage() {
   // Use state hooks
-  const [getTitle] = eState<string>("title", "About Elux");
+  const [getTitle] = eState<string>("title", "Elux Docs");
   const [getDescription] = eState<string>(
     "description",
-    "Elux is a lightweight, TypeScript-first framework designed to provide a modern development experience without React dependencies."
+    "Learn more about the Elux Framework and its capabilities"
   );
 
   return (

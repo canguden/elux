@@ -25,7 +25,7 @@ export async function getLayoutProps(_context: SSRContext) {
         { label: "About", href: "/about" },
         { label: "Docs", href: "/docs" },
       ],
-      title: "Elux - A Lightweight fully HackableFramework",
+      title: "Elux - A Lightweight fully Hackable Framework",
     },
   };
 }

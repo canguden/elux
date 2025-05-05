@@ -13,6 +13,9 @@ const globalStore: Record<string, Signal<any>> = {};
 // Store component references for direct DOM updates
 const componentRefs: Map<string, Function[]> = new Map();
 
+// Store effect cleanup functions
+const effectCleanups: Map<Function, (() => void)[]> = new Map();
+
 // Initialize with default values
 const initialState = {
   count: 0,
@@ -101,6 +104,84 @@ export function eState<T>(
 export const useState = eState;
 
 /**
+ * Effect hook for handling side effects
+ * Similar to React's useEffect but with Elux naming convention
+ */
+export function eFx(
+  effect: () => void | (() => void),
+  dependencies?: any[]
+): void {
+  const currentComponent = getCurrentComponent();
+  if (!currentComponent) {
+    printError("eFx called outside of component rendering");
+    return;
+  }
+
+  // Create unique key for this effect instance
+  const isFirstRender = !effectCleanups.has(currentComponent);
+
+  // Run effect and store any cleanup function
+  if (isFirstRender || !dependencies) {
+    // Run the effect function
+    runEffect(currentComponent, effect);
+  } else if (dependencies && dependencies.length === 0) {
+    // Empty deps array means "run only once"
+    if (isFirstRender) {
+      runEffect(currentComponent, effect);
+    }
+  } else {
+    // We don't actually track dependencies in this implementation
+    // Just run the effect each time
+    runEffect(currentComponent, effect);
+  }
+
+  // Cleanup function to run when component unmounts
+  if (isFirstRender) {
+    const originalUnmount = currentComponent.prototype?.componentWillUnmount;
+    currentComponent.prototype.componentWillUnmount = function () {
+      // Run any stored cleanup functions
+      const cleanups = effectCleanups.get(currentComponent) || [];
+      cleanups.forEach((cleanup) => {
+        try {
+          cleanup();
+        } catch (e) {
+          printError("Error in effect cleanup:", e);
+        }
+      });
+
+      // Call the original unmount if it exists
+      if (originalUnmount) {
+        originalUnmount.call(this);
+      }
+    };
+  }
+}
+
+// Helper to run an effect and store its cleanup
+function runEffect(
+  component: Function,
+  effect: () => void | (() => void)
+): void {
+  try {
+    // Run the effect and get any cleanup function
+    const cleanup = effect();
+
+    // If the effect returned a cleanup function, store it
+    if (typeof cleanup === "function") {
+      if (!effectCleanups.has(component)) {
+        effectCleanups.set(component, []);
+      }
+      effectCleanups.get(component)!.push(cleanup);
+    }
+  } catch (e) {
+    printError("Error in effect:", e);
+  }
+}
+
+// For backwards compatibility
+export const useEffect = eFx;
+
+/**
  * Get multiple state values at once
  */
 export function useStore<T extends Record<string, any>>(
@@ -175,13 +256,4 @@ export function hydrateState(initialData: Record<string, any>): void {
   if (typeof window !== "undefined") {
     (window as any).__INITIAL_DATA__ = initialData;
   }
-}
-
-// Debug function to manually update count display
-if (typeof window !== "undefined") {
-  (window as any).debugUpdateCount = (value: number) => {
-    const [getCount, setCount] = eState("count");
-    setCount(value);
-    print("[Debug] Count updated manually to:", value);
-  };
 }

@@ -2,5 +2,8 @@
 export const routes = {
   "/": () => import("/app/page"),
   "/about": () => import("/app/about/page"),
-  "/notfound": () => import("/app/notfound/page")
+  "/docs": () => import("/app/docs/page"),
+  "/notfound": () => import("/app/notfound/page"),
+  "/search": () => import("/app/search/page"),
+  "/test": () => import("/app/test/page")
 };

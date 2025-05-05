@@ -22,19 +22,27 @@ interface AppState {
   count?: number; // Add count to the AppState interface
 }
 
+// Get initial data from server if available
+const initialData =
+  typeof window !== "undefined" && window.__INITIAL_DATA__
+    ? window.__INITIAL_DATA__
+    : {};
+
+// Initialize app state with data from server if available
 const appState = createStore<AppState>({
   isLoading: false,
   error: null as Error | null,
   currentPath: typeof window !== "undefined" ? window.location.pathname : "/",
   params: {} as Record<string, string>,
-  count: 0, // Initialize count in the state
+  count: 0,
+  ...initialData, // Merge initial data from server
 });
 
 // UI Components
 const LoadingIndicator = () => (
   <div className="loading">
     <div className="spinner"></div>
-    <p>Loading...</p>
+    <p>Booting...</p>
   </div>
 );
 
@@ -67,23 +75,75 @@ async function initApp() {
   // Load routes into the router
   router.loadRoutes(routes);
 
-  // Function to render the current route
-  async function renderRoute() {
-    // Update state
-    appState.setState({ isLoading: true, error: null });
-
-    // Show loading indicator
-    if (container) {
-      render(<LoadingIndicator />, container);
+  // Function to fetch latest routes from server
+  async function refreshRoutes() {
+    try {
+      const response = await fetch("/__elux/api/routes");
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      
+      const data = await response.json();
+      const serverRoutes = data.routes as string[];
+      
+      // Get current client routes
+      const clientRoutes = Object.keys(routes);
+      
+      // Check if we have new routes
+      const hasNewRoutes = serverRoutes.some(route => !clientRoutes.includes(route));
+      
+      if (hasNewRoutes) {
+        print("New routes detected, reloading page to update...");
+        // Force reload to get new routes.ts
+        window.location.reload();
+      }
+      
+      return !hasNewRoutes;
+    } catch (error) {
+      printError("Error refreshing routes:", error);
+      return false;
     }
+  }
+  
+  // Check for route updates every 5 seconds in development
+  if (process.env.NODE_ENV !== "production") {
+    setInterval(refreshRoutes, 5000);
+  }
+  
+  // Add route refresh to window for debugging
+  window.refreshEluxRoutes = refreshRoutes;
 
+  // Function to render the current route
+  async function renderRoute(isInitialLoad = false) {
     try {
       // Get the current path
       const path = router.getCurrentPath();
       print(`Rendering route: ${path}`);
 
+      // If this is a new route, first check if routes have been updated
+      if (!isInitialLoad) {
+        try {
+          // Before navigating to a path, check if we have that route
+          // If not, try to refresh routes from server
+          if (!Object.keys(routes).includes(path)) {
+            await refreshRoutes();
+          }
+        } catch (e) {
+          // Ignore refresh errors and continue with navigation
+        }
+      }
+
       // Match the route
       const { route, params } = router.match(path);
+
+      // On initial load with server rendering, don't show loading indicator
+      if (!isInitialLoad) {
+        // Update state
+        appState.setState({ isLoading: true, error: null });
+
+        // Show loading indicator
+        if (container) {
+          render(<LoadingIndicator />, container);
+        }
+      }
 
       // Update state with params
       appState.setState({ params });
@@ -96,9 +156,38 @@ async function initApp() {
         throw new Error(`Component not found for route: ${path}`);
       }
 
+      // Check for server-side hydration
+      const shouldHydrate =
+        isInitialLoad &&
+        container &&
+        container.innerHTML &&
+        container.innerHTML.trim() !== "";
+
+      // When hydrating on initial load with SSR, use the props from __INITIAL_DATA__
+      const props = shouldHydrate ? initialData : { params };
+
+      // Log hydration status
+      if (shouldHydrate) {
+        print("Hydrating existing server-rendered HTML");
+      }
+
       // Render the page
       if (container) {
-        render(<Page params={params} />, container);
+        try {
+          render(<Page {...props} />, container);
+        } catch (renderError) {
+          printError("Error rendering component:", renderError);
+          render(
+            <ErrorDisplay
+              error={
+                renderError instanceof Error
+                  ? renderError
+                  : new Error(String(renderError))
+              }
+            />,
+            container
+          );
+        }
       }
 
       // Update state
@@ -123,11 +212,11 @@ async function initApp() {
 
   // Subscribe to router changes
   router.subscribe(() => {
-    renderRoute();
+    renderRoute(false);
   });
 
   // Set up Link component - exported for use in applications
-  window.EluxLink = (props: {
+  (window as any).EluxLink = (props: {
     href: string;
     children: any;
     className?: string | undefined;
@@ -135,7 +224,7 @@ async function initApp() {
   }) => {
     const { href, children, className, ...rest } = props;
 
-    const handleClick = (e: MouseEvent) => {
+    const handleClick = async (e: MouseEvent) => {
       // Skip navigation for external links or modified clicks
       if (
         href.startsWith("http") ||
@@ -150,6 +239,20 @@ async function initApp() {
       // Prevent default browser navigation
       e.preventDefault();
 
+      // Check if the route exists or if we need to refresh
+      const normalizedPath = href.startsWith("/") ? href : `/${href}`;
+      if (!Object.keys(routes).includes(normalizedPath)) {
+        try {
+          // Try to refresh routes before navigation
+          const refreshed = await refreshRoutes();
+          if (!refreshed) {
+            print(`Route not found: ${normalizedPath}, but continuing anyway...`);
+          }
+        } catch (error) {
+          printError("Error checking routes:", error);
+        }
+      }
+
       // Navigate using the router
       router.navigate(href);
     };
@@ -161,8 +264,8 @@ async function initApp() {
     );
   };
 
-  // Initial render
-  renderRoute();
+  // Initial render - pass true to indicate this is the initial load
+  renderRoute(true);
 }
 
 // Setup global counter update handler
@@ -216,6 +319,15 @@ function setupCounterUpdateHandler() {
   print("Counter update handler initialized");
 }
 
+// Add type declarations for global variables
+declare global {
+  interface Window {
+    __INITIAL_DATA__?: Record<string, any>;
+    updateCounterDisplay: (value: number) => void;
+    refreshEluxRoutes: () => Promise<boolean>;
+  }
+}
+
 // Initialize when the DOM is ready
 if (typeof window !== "undefined") {
   if (document.readyState === "loading") {
@@ -224,6 +336,3 @@ if (typeof window !== "undefined") {
     initApp();
   }
 }
-
-// Note: Global type declarations for Window.EluxLink and updateCounterDisplay
-// are handled in a separate .d.ts file to avoid conflicts

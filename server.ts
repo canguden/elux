@@ -1,14 +1,12 @@
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import chalk from "chalk";
 
 // Get current directory
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -29,6 +27,84 @@ const logger = {
     DEV_MODE &&
     console.log(`${chalk.magenta("🔌")} ${chalk.bold(method)} ${url}`),
 };
+
+// Scan app directory and generate routes dynamically
+async function generateRoutes() {
+  const appDir = path.join(process.cwd(), "app");
+  logger.info("Scanning app directory for routes...");
+
+  // Hold all discovered routes
+  const routes: Record<string, string> = {
+    "/": "/app/page",
+  };
+
+  // Function to recursively scan directories
+  function scanDirectory(dir: string, routePrefix: string = "") {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+      // Check for page.tsx in current directory
+      const hasPage = entries.some(
+        (entry) =>
+          entry.isFile() &&
+          (entry.name === "page.tsx" || entry.name === "page.jsx")
+      );
+
+      if (hasPage) {
+        const routePath = routePrefix || "/";
+        routes[routePath] = `${dir.replace(process.cwd(), "")}/page`.replace(
+          /\\/g,
+          "/"
+        );
+        logger.debug(`Found route: ${routePath} -> ${routes[routePath]}`);
+      }
+
+      // Recursively scan subdirectories
+      for (const entry of entries) {
+        if (
+          entry.isDirectory() &&
+          !entry.name.startsWith("_") &&
+          !entry.name.startsWith(".")
+        ) {
+          const newRoutePrefix = `${routePrefix}/${entry.name}`.replace(
+            /\/+/g,
+            "/"
+          );
+          scanDirectory(path.join(dir, entry.name), newRoutePrefix);
+        }
+      }
+    } catch (err) {
+      logger.error(`Error scanning directory ${dir}: ${err}`);
+    }
+  }
+
+  // Start scanning from app directory
+  scanDirectory(appDir);
+
+  // Add notfound route if it exists
+  const notFoundPath = path.join(appDir, "notfound", "page.tsx");
+  if (fs.existsSync(notFoundPath)) {
+    routes["/notfound"] = "/app/notfound/page";
+  }
+
+  // Generate routes.ts file
+  const routesFileContent = `// Auto-generated routes file - DO NOT EDIT
+export const routes = {
+${Object.entries(routes)
+  .map(([route, path]) => `  "${route}": () => import("${path}")`)
+  .join(",\n")}
+};
+`;
+
+  // Write to routes.ts
+  fs.writeFileSync(
+    path.join(process.cwd(), "elux", "routes.ts"),
+    routesFileContent
+  );
+  logger.success(`Generated ${Object.keys(routes).length} routes`);
+
+  return routes;
+}
 
 // Request timer middleware
 const requestTimer = (
@@ -76,18 +152,20 @@ async function importModule(modulePath: string) {
 // Convert file path to file URL
 function pathToFileURL(filePath: string): URL {
   let url = new URL(`file://${filePath}`);
-  
+
   // Ensure correct format on Windows
-  if (process.platform === 'win32') {
-    url = new URL(`file:///${filePath.replace(/\\/g, '/')}`);
+  if (process.platform === "win32") {
+    url = new URL(`file:///${filePath.replace(/\\/g, "/")}`);
   }
-  
+
   return url;
 }
 
 // Render a page with its layout
 async function renderPage(pagePath: string, params: Record<string, any> = {}) {
   try {
+    logger.debug(`Rendering page from path: ${pagePath}`);
+
     // Import the page component
     const pageModule = await importModule(pagePath);
     if (!pageModule || !pageModule.default) {
@@ -171,118 +249,199 @@ async function renderPage(pagePath: string, params: Record<string, any> = {}) {
       }
     }
 
+    // Import the renderToString function from elux
+    const eluxCore = await importModule(
+      path.join(process.cwd(), "elux", "core.ts")
+    );
+
+    if (!eluxCore || typeof eluxCore.renderToString !== "function") {
+      throw new Error(
+        `renderToString function not found in elux/core.ts - got: ${JSON.stringify(
+          Object.keys(eluxCore || {})
+        )}`
+      );
+    }
+
+    const { renderToString } = eluxCore;
+
     // Render the page component
     try {
-      const pageComponent = pageModule.default(pageProps);
+      // For debugging
+      logger.debug(`Calling page component: ${pagePath}`);
+
+      // Generate page component with the page props
+      let pageComponent;
+      try {
+        pageComponent = pageModule.default(pageProps);
+        logger.debug(`Page component type: ${typeof pageComponent}`);
+      } catch (componentError) {
+        logger.error(`Error creating page component: ${componentError}`);
+        throw componentError;
+      }
 
       // Wrap with layout if available, otherwise just return the page
       let content;
       if (layoutModule && layoutModule.default) {
-        content = layoutModule.default({
-          children: pageComponent,
-          ...layoutProps,
-        });
+        try {
+          content = layoutModule.default({
+            children: pageComponent,
+            ...layoutProps,
+          });
+          logger.debug(`Layout component type: ${typeof content}`);
+        } catch (layoutError) {
+          logger.error(`Error creating layout component: ${layoutError}`);
+          content = pageComponent; // Fall back to page without layout
+        }
       } else {
         content = pageComponent;
+      }
+
+      // Debug info for the content
+      logger.debug(`Content before rendering: type=${typeof content}`);
+      if (typeof content === "object" && content !== null) {
+        logger.debug(`Content object type: ${content.type}`);
+      }
+
+      // Properly render the VDOM to HTML
+      let renderedHTML;
+
+      try {
+        // Convert the component to HTML
+        renderedHTML = await renderToString(content);
+
+        if (DEV_MODE) {
+          logger.debug(`Rendered HTML length: ${renderedHTML?.length || 0}`);
+          logger.debug(
+            `Rendered HTML starts with: ${renderedHTML?.substring(0, 50)}`
+          );
+        }
+      } catch (renderError) {
+        logger.error(`Error during renderToString: ${renderError}`);
+        throw renderError;
+      }
+
+      // If renderToString fails or returns empty, show a helpful error
+      if (!renderedHTML || renderedHTML.trim() === "") {
+        logger.error("Failed to render component to HTML");
+        renderedHTML = `
+          <div style="color: red; padding: 16px; border: 1px solid red; margin: 16px 0;">
+            <h3>Render Error</h3>
+            <p>The component could not be rendered to HTML.</p>
+            <p>This usually happens when the component structure doesn't match the expected VDOM format.</p>
+            <pre>${JSON.stringify(content, null, 2)}</pre>
+          </div>
+        `;
       }
 
       // Create hydration script with initial data
       const initialData = {
         ...pageProps,
         ...layoutProps,
-        route: params.route || '/',
+        route: params.route || "/",
       };
-      
+
       // Add state hydration script
       const hydrationScript = `
         <script>
           window.__INITIAL_DATA__ = ${JSON.stringify(initialData)};
         </script>
-        <script type="module">
-          import { hydrateState } from '/elux/core/context.ts';
-          
-          // Hydrate global state when DOM is ready
-          document.addEventListener('DOMContentLoaded', () => {
-            if (window.__INITIAL_DATA__) {
-              hydrateState(window.__INITIAL_DATA__);
-            }
-          });
-        </script>
-        <script type="module" src="/elux/client/client.ts"></script>
       `;
 
-      // Insert hydration script into head or before closing body
-      if (typeof content === 'string') {
-        if (content.includes('</head>')) {
-          content = content.replace('</head>', `${hydrationScript}</head>`);
-        } else if (content.includes('</body>')) {
-          content = content.replace('</body>', `${hydrationScript}</body>`);
-        } else {
-          content = `${content}${hydrationScript}`;
-        }
-      }
-      
-      return content;
+      // Generate the full HTML page
+      const html = `
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+            <title>${(pageProps as any).title || "Elux App"}</title>
+            <link rel="stylesheet" href="/styles/globals.css" type="text/css" />
+            ${hydrationScript}
+          </head>
+          <body>
+            <div id="app">${renderedHTML}</div>
+            <script type="module" src="/elux/runtime.tsx"></script>
+          </body>
+        </html>
+      `;
+
+      return html;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : "";
-      logger.error(`Failed to render page component: ${errorMessage}`);
+      logger.error(`Error rendering component: ${errorMessage}`);
 
-      if (DEV_MODE) {
-        return `
-          <div style="
-            padding: 20px;
-            margin: 20px;
-            border: 2px solid #e53e3e;
-            border-radius: 5px;
-            background-color: #fff5f5;
-            color: #e53e3e;
-            font-family: -apple-system, system-ui, sans-serif;
-          ">
-            <h2>Error in Page Component</h2>
-            <p>Error rendering page: ${errorMessage}</p>
-            <pre style="
-              background: #f8f8f8;
-              padding: 10px;
-              border-radius: 4px;
-              overflow-x: auto;
-            ">${errorStack}</pre>
-          </div>
-        `;
-      }
-
-      return `<div class="error">Error rendering page</div>`;
-    }
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : "";
-    logger.error(`Failed to render page: ${errorMessage}`);
-
-    if (DEV_MODE) {
+      // Return error page
       return `
-        <div style="
-          padding: 20px;
-          margin: 20px;
-          border: 2px solid #e53e3e;
-          border-radius: 5px;
-          background-color: #fff5f5;
-          color: #e53e3e;
-          font-family: -apple-system, system-ui, sans-serif;
-        ">
-          <h2>Error Loading Page</h2>
-          <p>Error: ${errorMessage}</p>
-          <pre style="
-            background: #f8f8f8;
-            padding: 10px;
-            border-radius: 4px;
-            overflow-x: auto;
-          ">${errorStack}</pre>
-        </div>
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+            <title>Error - Elux App</title>
+            <link rel="stylesheet" href="/styles/globals.css" type="text/css" />
+          </head>
+          <body>
+            <div style="
+              padding: 20px;
+              margin: 20px;
+              border: 2px solid #e53e3e;
+              border-radius: 5px;
+              background-color: #fff5f5;
+              color: #e53e3e;
+              font-family: -apple-system, system-ui, sans-serif;
+            ">
+              <h2>Error Rendering Page</h2>
+              <p>${errorMessage}</p>
+              <pre style="
+                background: #f8f8f8;
+                padding: 10px;
+                border-radius: 4px;
+                overflow-x: auto;
+              ">${error instanceof Error ? error.stack : ""}</pre>
+            </div>
+          </body>
+        </html>
       `;
     }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Error in renderPage: ${errorMessage}`);
 
-    return `<div class="error">Error rendering page: ${errorMessage}</div>`;
+    // Return generic error page
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+          <title>Server Error - Elux App</title>
+          <style>
+            body { 
+              font-family: -apple-system, system-ui, sans-serif; 
+              padding: 2rem; 
+              max-width: 800px; 
+              margin: 0 auto;
+            }
+            h1 { color: #e53e3e; }
+            pre { 
+              background: #f1f1f1;
+              padding: 1rem;
+              border-radius: 4px;
+              overflow-x: auto;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Server Error</h1>
+          <p>${errorMessage}</p>
+          <pre>${error instanceof Error ? error.stack : ""}</pre>
+        </body>
+      </html>
+    `;
   }
 }
 
@@ -291,6 +450,9 @@ async function handleRoute(req: express.Request, res: express.Response) {
   try {
     const route = req.path;
     logger.debug(`Handling route: ${route}`);
+
+    // Ensure Content-Type is set correctly for all routes
+    res.setHeader("Content-Type", "text/html");
 
     // Map route to the corresponding page file
     let pagePath =
@@ -338,6 +500,8 @@ async function handleRoute(req: express.Request, res: express.Response) {
     // Include the route information in the params
     const params = { route };
     logger.debug(`Rendering page from: ${pagePath}`);
+
+    // Get the content
     const content = await renderPage(pagePath, params);
 
     // Send the rendered HTML
@@ -346,6 +510,10 @@ async function handleRoute(req: express.Request, res: express.Response) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : "";
     logger.error(`Route handling error: ${errorMessage}`);
+
+    // Set content type to ensure proper browser rendering
+    res.setHeader("Content-Type", "text/html");
+
     res.status(500).send(`
       <html>
         <head>
@@ -385,6 +553,34 @@ async function start() {
       `Starting Elux ${DEV_MODE ? "development" : "production"} server...`
     );
 
+    // Generate routes from filesystem
+    await generateRoutes();
+
+    // In development mode, watch for file changes to regenerate routes
+    if (DEV_MODE) {
+      const appDir = path.join(process.cwd(), "app");
+      let debounceTimer: NodeJS.Timeout | null = null;
+
+      // Simple file watcher for the app directory
+      fs.watch(appDir, { recursive: true }, async (_eventType, filename) => {
+        if (
+          filename &&
+          (filename.endsWith("page.tsx") || filename.includes("/"))
+        ) {
+          // Debounce to avoid multiple regenerations
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(async () => {
+            logger.info(
+              `File change detected: ${filename}, regenerating routes...`
+            );
+            await generateRoutes();
+          }, 500);
+        }
+      });
+
+      logger.info(`Watching ${appDir} for file changes...`);
+    }
+
     const app = express();
     let vite: any;
 
@@ -413,7 +609,7 @@ async function start() {
 
     // Log all requests for debugging
     app.use(requestTimer);
-    app.use((req, res, next) => {
+    app.use((req, _res, next) => {
       logger.route(req.method, req.url);
       next();
     });
@@ -426,14 +622,14 @@ async function start() {
 
     // Custom dev inspector route
     if (DEV_MODE) {
-      app.get("/__elux", (req, res) => {
+      app.get("/__elux", (_req, res) => {
         logger.debug("Dev inspector accessed");
         // We'll implement the full inspector later
         res.sendFile(path.join(process.cwd(), "elux", "dev", "inspector.html"));
       });
 
       // API endpoint for getting framework status
-      app.get("/__elux/api/status", (req, res) => {
+      app.get("/__elux/api/status", (_req, res) => {
         res.json({
           version: "0.1.0",
           mode: "development",
@@ -455,10 +651,38 @@ async function start() {
           },
         });
       });
+
+      // API endpoint for routes - allows client to refresh routes without reloading
+      app.get("/__elux/api/routes", (_req, res) => {
+        // Read the routes file
+        try {
+          const routesFilePath = path.join(process.cwd(), "elux", "routes.ts");
+          const routesContent = fs.readFileSync(routesFilePath, "utf-8");
+
+          // Extract route paths using regex
+          const routeRegex = /"(\/[^"]*)":/g;
+          const routes = [];
+          let match;
+
+          while ((match = routeRegex.exec(routesContent)) !== null) {
+            routes.push(match[1]);
+          }
+
+          res.json({
+            routes,
+            timestamp: Date.now(),
+          });
+        } catch (error) {
+          res.status(500).json({
+            error: "Failed to read routes",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
     }
 
     // Explicitly handle CSS file requests
-    app.get("/styles/globals.css", (req, res) => {
+    app.get("/styles/globals.css", (_req, res) => {
       logger.debug(
         "CSS file requested, serving from: " +
           path.join(process.cwd(), "styles/globals.css")
@@ -504,9 +728,9 @@ async function start() {
     app.use(
       (
         err: Error,
-        req: express.Request,
+        _req: express.Request,
         res: express.Response,
-        next: express.NextFunction
+        _next: express.NextFunction
       ) => {
         logger.error(`Server error: ${err.message}`);
         res.status(500).send(`
