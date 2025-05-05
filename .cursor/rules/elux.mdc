@@ -1,0 +1,51 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: Core development guidelines and architectural principles for the Elux framework.
+globs:
+  - 'framework/**'
+  - 'App/**'
+  - 'styles/**'
+alwaysApply: false
+---
+
+## 🚀 Elux Framework Overview
+
+Elux is a fully hackable, TypeScript-first, SSR/SSG-capable, fullstack framework built from scratch. It emphasizes developer experience, performance, and modularity, without relying on React.
+
+### 🔧 Key Architectural Principles
+
+- **React-Free Rendering**: Elux uses a custom renderer located at `framework/client/renderer.ts`.
+- **State Management**: Implemented via signals in `framework/client/state.ts`.
+- **File-Based Routing**: Routes are defined in `framework/server/router.ts`, supporting both SSR and SSG.
+- **Custom CSS Framework**: A lightweight, utility-first CSS system inspired by TailwindCSS, compiled at build-time with no runtime overhead.
+- **Plugin System**: Extensible plugins located in `framework/plugins/`, supporting features like Auth.js, Prisma, Stripe, and AI integrations.
+- **CLI Tooling**: Scaffold new projects using `npx create-elux-app@latest`.
+
+### 🧱 Development Guidelines
+
+- **Routing**: Define pages in the `App/` directory using `page.tsx` files. Utilize precompiled routing maps to avoid runtime overhead.
+- **Styling**: Use the custom CSS framework defined in `styles/globals.css`. Avoid runtime-based CSS solutions.
+- **State Management**: Leverage the signals system for reactive state. Avoid external state management libraries unless necessary.
+- **SSR/SSG**: Utilize Express in `framework/core.ts` for server-side rendering. Implement smart on-demand SSR rendering in development and static file streaming in production.
+- **Plugins**: Add plugins in the `framework/plugins/` directory. Ensure they are lazy-loaded and tree-shakable to prevent unnecessary bloat.
+- **Dark Mode**: Implement theme toggling using the built-in system in `theme.ts`.
+- **Image Optimization**: Use Vite image plugins and the `<Link />` component in `components/Link.tsx` for optimized image handling.
+
+### 🛠️ Best Practices
+
+- **Modularity**: Keep components and modules small and focused. Promote reusability.
+- **Performance**: Prioritize lazy-loading and partial hydration to improve Time to Interactive (TTI).
+- **Developer Experience**: Utilize the built-in dev tools, including the `/__elux` route for inspecting routes, SSR/SSG modes, and plugin statuses.
+- **Documentation**: Maintain clear documentation for each module and plugin to aid in onboarding and collaboration.
+
+@framework/client/renderer.ts
+@framework/client/state.ts
+@framework/server/router.ts
+@framework/core.ts
+@styles/globals.css
+@components/Link.tsx
+

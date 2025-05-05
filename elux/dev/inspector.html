@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elux Dev Inspector</title>
+    <style>
+      :root {
+        --bg-color: #1a1a1a;
+        --text-color: #f0f0f0;
+        --primary-color: #3b82f6;
+        --secondary-color: #4f46e5;
+        --border-color: #333;
+        --success-color: #10b981;
+        --warning-color: #f59e0b;
+        --error-color: #ef4444;
+        --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+      }
+
+      body {
+        font-family: var(--font-family);
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        margin: 0;
+        padding: 0;
+        line-height: 1.5;
+      }
+
+      .inspector-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+
+      .inspector-header {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        background: linear-gradient(
+          90deg,
+          var(--primary-color),
+          var(--secondary-color)
+        );
+        color: white;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      }
+
+      .inspector-logo {
+        font-weight: bold;
+        font-size: 1.5rem;
+        margin-right: 1rem;
+      }
+
+      .inspector-tabs {
+        display: flex;
+        background-color: #222;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .inspector-tab {
+        padding: 0.75rem 1.25rem;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+      }
+
+      .inspector-tab.active {
+        border-bottom: 2px solid var(--primary-color);
+        background-color: #282828;
+      }
+
+      .inspector-tab:hover:not(.active) {
+        background-color: #252525;
+      }
+
+      .inspector-content {
+        flex: 1;
+        padding: 1rem;
+        overflow-y: auto;
+      }
+
+      .inspector-panel {
+        display: none;
+      }
+
+      .inspector-panel.active {
+        display: block;
+        animation: fadeIn 0.3s;
+      }
+
+      .inspector-card {
+        background-color: #222;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .inspector-card-title {
+        font-size: 1.25rem;
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+        color: var(--primary-color);
+        display: flex;
+        align-items: center;
+      }
+
+      .inspector-card-title svg {
+        margin-right: 0.5rem;
+      }
+
+      .inspector-item {
+        padding: 0.5rem;
+        background-color: #333;
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+      }
+
+      .inspector-item-title {
+        font-weight: bold;
+        color: var(--primary-color);
+      }
+
+      .inspector-routes {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .inspector-route {
+        display: flex;
+        padding: 0.5rem;
+        background-color: #333;
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+        align-items: center;
+      }
+
+      .route-method {
+        background-color: var(--primary-color);
+        color: white;
+        border-radius: 4px;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        margin-right: 0.5rem;
+      }
+
+      .route-path {
+        font-family: monospace;
+        flex: 1;
+      }
+
+      .pill {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        margin-right: 0.5rem;
+      }
+
+      .pill-success {
+        background-color: var(--success-color);
+        color: white;
+      }
+
+      .pill-warning {
+        background-color: var(--warning-color);
+        color: white;
+      }
+
+      .pill-error {
+        background-color: var(--error-color);
+        color: white;
+      }
+
+      .refresh-btn {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        font-family: var(--font-family);
+        font-size: 0.875rem;
+        transition: background-color 0.2s;
+      }
+
+      .refresh-btn:hover {
+        background-color: var(--secondary-color);
+      }
+
+      .component-tree {
+        font-family: monospace;
+        padding-left: 1.5rem;
+      }
+
+      .component-name {
+        font-weight: bold;
+      }
+
+      .component-state {
+        color: var(--success-color);
+        margin-left: 0.5rem;
+      }
+
+      .status-indicator {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+
+      .status-indicator-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+      }
+
+      .dot-success {
+        background-color: var(--success-color);
+        box-shadow: 0 0 5px var(--success-color);
+      }
+
+      .tree-item {
+        padding: 0.25rem;
+        border-left: 1px solid var(--border-color);
+        margin-left: 0.5rem;
+      }
+
+      .tree-toggle {
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .tree-children {
+        margin-left: 1rem;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      .performance-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .stat-card {
+        background-color: #282828;
+        border-radius: 6px;
+        padding: 1.25rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        margin: 0.5rem 0;
+        color: var(--primary-color);
+      }
+
+      .stat-label {
+        font-size: 0.875rem;
+        color: #aaa;
+      }
+
+      .reload-hint {
+        color: #999;
+        margin-top: 0.5rem;
+        font-size: 0.875rem;
+      }
+
+      .code-block {
+        background-color: #282c34;
+        border-radius: 6px;
+        padding: 1rem;
+        font-family: "Fira Code", Consolas, Monaco, "Andale Mono", monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+        color: #abb2bf;
+        overflow-x: auto;
+      }
+
+      textarea.code-block {
+        width: 100%;
+        min-height: 200px;
+        resize: vertical;
+        margin-top: 0.5rem;
+      }
+
+      .console-preview {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        background-color: #282c34;
+        font-family: monospace;
+      }
+
+      .console-line {
+        padding: 2px 0;
+      }
+
+      .console-error {
+        color: var(--error-color);
+      }
+
+      .console-warning {
+        color: var(--warning-color);
+      }
+
+      .console-info {
+        color: var(--primary-color);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="inspector-container">
+      <header class="inspector-header">
+        <div class="inspector-logo">⚡ Elux Inspector</div>
+        <div>
+          <span id="framework-version">v0.1.0</span>
+        </div>
+      </header>
+
+      <div class="inspector-tabs">
+        <div class="inspector-tab active" data-tab="overview">Overview</div>
+        <div class="inspector-tab" data-tab="components">Components</div>
+        <div class="inspector-tab" data-tab="routes">Routes</div>
+        <div class="inspector-tab" data-tab="state">State</div>
+        <div class="inspector-tab" data-tab="performance">Performance</div>
+        <div class="inspector-tab" data-tab="console">Console</div>
+      </div>
+
+      <div class="inspector-content">
+        <!-- Overview Panel -->
+        <div class="inspector-panel active" id="overview-panel">
+          <div class="status-indicator">
+            <div class="status-indicator-dot dot-success"></div>
+            <div>Elux dev server running</div>
+          </div>
+
+          <div class="performance-stats">
+            <div class="stat-card">
+              <div class="stat-label">Components</div>
+              <div class="stat-value" id="component-count">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Routes</div>
+              <div class="stat-value" id="route-count">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">SSR Mode</div>
+              <div class="stat-value">✓</div>
+            </div>
+          </div>
+
+          <div class="inspector-card">
+            <h3 class="inspector-card-title">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12 4V20M20 12H4"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              Framework Health
+            </h3>
+            <div id="health-checks">
+              <div class="inspector-item">
+                <span class="pill pill-success">✓</span>
+                <span>Server running in development mode</span>
+              </div>
+              <div class="inspector-item">
+                <span class="pill pill-success">✓</span>
+                <span>HMR enabled</span>
+              </div>
+              <div class="inspector-item">
+                <span class="pill pill-success">✓</span>
+                <span>State management ready</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="inspector-card">
+            <h3 class="inspector-card-title">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M21.2099 15.89C20.5737 17.3946 19.5787 18.7202 18.3118 19.7513C17.0449 20.7824 15.5447 21.4874 13.9424 21.8048C12.34 22.1221 10.6843 22.0421 9.12006 21.5719C7.55578 21.1016 6.13054 20.2551 4.97833 19.1029C3.82611 17.9507 2.9796 16.5254 2.50932 14.9612C2.03904 13.397 1.95907 11.7412 2.27639 10.1389C2.59371 8.53655 3.29868 7.03637 4.32979 5.76946C5.3609 4.50255 6.68652 3.50754 8.19123 2.87134"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M22 12C22 10.6868 21.7413 9.38642 21.2388 8.17317C20.7362 6.95991 19.9997 5.85752 19.0711 4.92893C18.1425 4.00035 17.0401 3.26375 15.8268 2.7612C14.6136 2.25866 13.3132 2 12 2V12H22Z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              Environment
+            </h3>
+            <div>
+              <div class="inspector-item">
+                <span class="inspector-item-title">App Directory:</span>
+                <code>/app</code>
+              </div>
+              <div class="inspector-item">
+                <span class="inspector-item-title">Node Version:</span>
+                <code id="node-version">...</code>
+              </div>
+              <div class="inspector-item">
+                <span class="inspector-item-title">Plugins:</span>
+                <div id="plugins-list">None detected</div>
+              </div>
+            </div>
+          </div>
+
+          <button class="refresh-btn" onclick="refreshData()">
+            Refresh Data
+          </button>
+          <div class="reload-hint">
+            Press F5 to refresh the page and reflect latest code changes
+          </div>
+        </div>
+
+        <!-- Components Panel -->
+        <div class="inspector-panel" id="components-panel">
+          <div class="inspector-card">
+            <h3 class="inspector-card-title">Components Tree</h3>
+            <div id="component-tree" class="component-tree">
+              <div class="tree-item">
+                <span class="tree-toggle">▶</span>
+                <span class="component-name">Demo</span>
+                <span class="component-state">rendered</span>
+                <div class="tree-children" style="display: none">
+                  <div class="tree-item">
+                    <span class="tree-toggle">▶</span>
+                    <span class="component-name">Header</span>
+                    <div class="tree-children" style="display: none">
+                      <div class="tree-item">
+                        <span class="component-name">Button</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="tree-item">
+                    <span class="component-name">Card</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Routes Panel -->
+        <div class="inspector-panel" id="routes-panel">
+          <div class="inspector-card">
+            <h3 class="inspector-card-title">Application Routes</h3>
+            <div class="inspector-routes">
+              <div class="inspector-route">
+                <span class="route-method">GET</span>
+                <span class="route-path">/</span>
+              </div>
+              <div class="inspector-route">
+                <span class="route-method">GET</span>
+                <span class="route-path">/about</span>
+              </div>
+              <div class="inspector-route">
+                <span class="route-method">GET</span>
+                <span class="route-path">/docs</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- State Panel -->
+        <div class="inspector-panel" id="state-panel">
+          <div class="inspector-card">
+            <h3 class="inspector-card-title">Global State</h3>
+            <div id="global-state">
+              <pre class="code-block">// No global state detected</pre>
+            </div>
+          </div>
+          <div class="inspector-card">
+            <h3 class="inspector-card-title">Signal Usage</h3>
+            <div id="signal-usage">
+              <div class="inspector-item">
+                <span class="inspector-item-title">Modal (isOpen):</span>
+                <code>false</code>
+              </div>
+              <div class="inspector-item">
+                <span class="inspector-item-title">Sidebar (isOpen):</span>
+                <code>false</code>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Performance Panel -->
+        <div class="inspector-panel" id="performance-panel">
+          <div class="inspector-card">
+            <h3 class="inspector-card-title">Performance Metrics</h3>
+            <div id="performance-metrics">
+              <div class="inspector-item">
+                <span class="inspector-item-title">Initial Render:</span>
+                <code>Loading...</code>
+              </div>
+              <div class="inspector-item">
+                <span class="inspector-item-title">Time to Interactive:</span>
+                <code>Loading...</code>
+              </div>
+              <div class="inspector-item">
+                <span class="inspector-item-title">Total Bundle Size:</span>
+                <code>Loading...</code>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Console Panel -->
+        <div class="inspector-panel" id="console-panel">
+          <div class="inspector-card">
+            <h3 class="inspector-card-title">Console Output</h3>
+            <div class="console-preview" id="console-output">
+              <div class="console-line">
+                Server started at http://localhost:3000
+              </div>
+              <div class="console-line console-info">✓ HMR enabled</div>
+              <div class="console-line console-warning">
+                ⚠️ No plugins detected
+              </div>
+            </div>
+            <textarea
+              class="code-block"
+              placeholder="// Enter JavaScript to evaluate"
+            ></textarea>
+            <button class="refresh-btn" style="margin-top: 0.5rem">
+              Run Code
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Tab switching functionality
+      document.querySelectorAll(".inspector-tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          // Remove active class from all tabs
+          document.querySelectorAll(".inspector-tab").forEach((t) => {
+            t.classList.remove("active");
+          });
+
+          // Hide all panels
+          document.querySelectorAll(".inspector-panel").forEach((panel) => {
+            panel.classList.remove("active");
+          });
+
+          // Add active class to clicked tab
+          tab.classList.add("active");
+
+          // Show corresponding panel
+          const tabId = tab.getAttribute("data-tab");
+          document.getElementById(`${tabId}-panel`).classList.add("active");
+        });
+      });
+
+      // Tree toggle functionality
+      document.querySelectorAll(".tree-toggle").forEach((toggle) => {
+        toggle.addEventListener("click", () => {
+          const children = toggle.parentElement.querySelector(".tree-children");
+          if (children) {
+            if (children.style.display === "none") {
+              children.style.display = "block";
+              toggle.textContent = "▼";
+            } else {
+              children.style.display = "none";
+              toggle.textContent = "▶";
+            }
+          }
+        });
+      });
+
+      // Fetch status data from API
+      async function refreshData() {
+        try {
+          const response = await fetch("/__elux/api/status");
+          const data = await response.json();
+
+          // Update UI with the data
+          document.getElementById(
+            "framework-version"
+          ).textContent = `v${data.version}`;
+          document.getElementById("component-count").textContent =
+            data.elux.components || 0;
+          document.getElementById("route-count").textContent =
+            data.elux.routes || 0;
+
+          // Node version
+          document.getElementById("node-version").textContent =
+            typeof process !== "undefined" ? process.version : "N/A";
+
+          // Add a console message
+          const consoleOutput = document.getElementById("console-output");
+          const timestamp = new Date().toLocaleTimeString();
+          consoleOutput.innerHTML += `<div class="console-line">[${timestamp}] Data refreshed</div>`;
+
+          // Auto-scroll console to bottom
+          consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        } catch (error) {
+          console.error("Failed to fetch status:", error);
+        }
+      }
+
+      // Initialize data
+      document.addEventListener("DOMContentLoaded", () => {
+        refreshData();
+      });
+    </script>
+  </body>
+</html>

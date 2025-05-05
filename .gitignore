@@ -1,0 +1,54 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*.local
+!.env.example
+
+# Build output
+dist/
+build/
+.elux/
+.cache/
+.temp/
+
+# Vite
+.vite/
+*.tsbuildinfo
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# OS
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Testing
+coverage/
+*.lcov
+
+# Optional runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Typescript
+*.tsbuildinfo
+
+# Mac system files
+.DS_Store
+
+# Local Elux dev server artifacts (if any)
+.elux-inspector/
