@@ -204,12 +204,13 @@ function getRouteAndParams(
     print(
       `[FileRouter] No route match found for: ${normalizedPath}, will use notfound`
     );
-    return { route: "", params: { path: normalizedPath } };
+    return { route: "/notfound", params: { path: normalizedPath } };
   }
 
   // Return empty with no match - the caller will handle 404
   print(`[FileRouter] No route match found for: ${normalizedPath}`);
-  return { route: "", params: { path: normalizedPath } };
+  // Always use notfound
+  return { route: "/notfound", params: { path: normalizedPath } };
 }
 
 /**
@@ -259,53 +260,58 @@ export async function renderCurrentRoute() {
     rootElement.innerHTML = "";
     rootElement.appendChild(loadingIndicator);
 
-    // Find the matching route
+    // Debug output - what routes do we have?
+    const availableRoutes = Object.keys(typedRoutes);
+    print(
+      `[FileRouter] DEBUG: Available routes: ${JSON.stringify(availableRoutes)}`
+    );
+    print(
+      `[FileRouter] DEBUG: Has notfound route: ${
+        typedRoutes["/notfound"] ? "YES" : "NO"
+      }`
+    );
+
+    // Make sure /notfound route exists - add it if missing
+    if (!typedRoutes["/notfound"]) {
+      print(`[FileRouter] DEBUG: Adding missing notfound route`);
+      typedRoutes["/notfound"] = () => import("../../app/notfound");
+    }
+
+    // Get the route and params
     const { route, params } = getRouteAndParams(pathname, typedRoutes);
     print(`[FileRouter] Route match result:`, { route, params });
 
-    // Handle 404 for routes that don't exist
-    if (!route) {
-      print(`[FileRouter] No route found for ${pathname}, showing 404 page`);
+    // Handle 404 for routes that don't exist - route should be "/notfound" here
+    print(`[FileRouter] DEBUG: Route for ${pathname} is ${route}`);
+    // Always handle 404 for routes that don't exist or if route is explicitly /notfound
+    if (
+      (route === "/notfound" && pathname !== "/notfound") ||
+      !typedRoutes[pathname]
+    ) {
+      print(`[FileRouter] Showing not-found page for path: ${pathname}`);
 
       try {
-        if (typedRoutes["/notfound"]) {
-          const notFoundModule = await typedRoutes["/notfound"]();
-          const NotFoundPage = notFoundModule.default;
+        // Import the notfound component directly
+        const notFoundModule = await import("../../app/notfound.tsx");
+        const NotFoundPage = notFoundModule.default;
 
-          if (NotFoundPage) {
-            // Remove the loading indicator
-            rootElement.innerHTML = "";
+        if (NotFoundPage) {
+          // Remove the loading indicator
+          rootElement.innerHTML = "";
 
-            // Directly render the NotFoundPage without layout for now
-            mount(h(NotFoundPage, { path: pathname }), rootElement);
-            print(`[FileRouter] Mounted not-found page`);
-          } else {
-            rootElement.innerHTML = `
-              <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
-                <h1>Page Not Found</h1>
-                <p>The page at <code>${pathname}</code> does not exist.</p>
-                <p><a href="/">Go Home</a></p>
-              </div>
-            `;
-          }
+          // Pass params properly to the NotFound component
+          mount(h(NotFoundPage, { params: { path: pathname } }), rootElement);
+          print(`[FileRouter] Mounted custom not-found page directly imported`);
         } else {
-          rootElement.innerHTML = `
-            <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
-              <h1>Page Not Found</h1>
-              <p>The page at <code>${pathname}</code> does not exist.</p>
-              <p><a href="/">Go Home</a></p>
-            </div>
-          `;
+          // This should never happen since we're directly importing the component
+          redirect("/");
         }
       } catch (error) {
-        printError("[FileRouter] Error loading not-found page:", error);
-        rootElement.innerHTML = `
-          <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
-            <h1>Page Not Found</h1>
-            <p>The page at <code>${pathname}</code> does not exist.</p>
-            <p><a href="/">Go Home</a></p>
-          </div>
-        `;
+        printError(
+          "[FileRouter] Error directly loading not-found page:",
+          error
+        );
+        redirect("/");
       }
 
       return;
@@ -365,7 +371,9 @@ export async function renderCurrentRoute() {
               const rootLayoutModule = await import("../../app/layout.tsx");
               RootLayout = rootLayoutModule.default;
               print(
-                `[FileRouter] Found root layout: ${RootLayout ? "Yes" : "No"}`
+                `[FileRouter] Found root layout: ${
+                  typeof RootLayout === "function" ? "Yes" : "No"
+                }`
               );
             } catch (err) {
               print(`[FileRouter] No root layout found: ${err}`);

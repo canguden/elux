@@ -25,11 +25,6 @@ function CounterComponent({ initialCount = 0, label = "Count" }: CounterProps) {
     // Log to console when count changes
     print(`Counter value changed to: ${getCount()}`);
 
-    // Update document title with current count
-    if (typeof document !== "undefined") {
-      document.title = `Count: ${getCount()} | Elux App`;
-    }
-
     // Listen for DOM updates triggered by other components
     if (typeof window !== "undefined") {
       const handleStateChange = (e: any) => {

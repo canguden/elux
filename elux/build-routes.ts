@@ -22,6 +22,12 @@ async function generateRoutesFile() {
     // Generate route map using our routeBuilder
     const routeMap = generateRouteMap(appDir);
 
+    // Ensure we have the notfound route
+    if (!routeMap["/notfound"]) {
+      console.log(`Adding missing /notfound route`);
+      routeMap["/notfound"] = () => import("../app/notfound");
+    }
+
     // Create routes.ts content
     let routesContent = `/**
  * This file is auto-generated - DO NOT EDIT MANUALLY
