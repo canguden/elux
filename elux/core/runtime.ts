@@ -164,7 +164,9 @@ async function initApp() {
 
   // Check for route updates in development mode
   if (process.env.NODE_ENV !== "production") {
-    setInterval(refreshRoutes, 10000); // Check every 10 seconds
+    // Temporarily disable automatic route refreshing as it's causing too frequent refreshes
+    // setInterval(refreshRoutes, 10000); // Check every 10 seconds
+    print("[Elux] Automatic route refreshing is disabled");
   }
 
   // Add route refresh to window for debugging
