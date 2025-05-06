@@ -14,25 +14,7 @@ export default function AboutPage() {
 
   return (
     <div className="container">
-      {/* Header */}
-      <header className="header">
-        <div className="header-inner">
-          <Link href="/" className="header-logo">
-            Elux
-          </Link>
-          <nav className="header-nav">
-            <Link href="/" className="header-nav-link">
-              Home
-            </Link>
-            <Link href="/about" className="header-nav-link active">
-              About
-            </Link>
-            <Link href="/docs" className="header-nav-link">
-              Docs
-            </Link>
-          </nav>
-        </div>
-      </header>
+
 
       {/* Main content */}
       <main className="mt-4">

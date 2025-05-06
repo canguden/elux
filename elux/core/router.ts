@@ -38,6 +38,21 @@ export class Router {
    * Register a route with the router
    */
   addRoute(path: string, loader: RouteLoader): void {
+    // Special handling for not-found route
+    if (path === "/notfound") {
+      this.setNotFoundRoute(loader);
+      // Also register it as a regular route so it can be accessed directly
+      const { pattern, params } = this.createPattern(path);
+      this.routes.push({
+        path,
+        loader,
+        pattern,
+        params,
+      });
+      console.log(`[Router] Added not-found route: ${path}`);
+      return;
+    }
+
     // Create the route pattern for matching
     const { pattern, params } = this.createPattern(path);
 
@@ -56,7 +71,7 @@ export class Router {
    */
   setNotFoundRoute(loader: RouteLoader): void {
     this.notFoundRoute = {
-      path: "*",
+      path: "/notfound",
       loader,
       pattern: /^.*$/,
     };
@@ -91,14 +106,16 @@ export class Router {
     // Return the not found route if no match
     if (this.notFoundRoute) {
       console.log(`No route found for ${url}, using notFound route`);
-      return { route: this.notFoundRoute, params: {} };
+      return { route: this.notFoundRoute, params: { path: url } };
     }
 
     // Try to use a default fallback for common routes like /about, /contact, etc.
     for (const route of this.routes) {
       // If we have a home route, use it as fallback
       if (route.path === "/" || route.path === "*") {
-        console.warn(`No route found for ${url} and no notFound route set. Using ${route.path} as fallback.`);
+        console.warn(
+          `No route found for ${url} and no notFound route set. Using ${route.path} as fallback.`
+        );
         return { route, params: {} };
       }
     }
@@ -180,6 +197,39 @@ export class Router {
 
     // Notify listeners
     this.notifyListeners();
+  }
+
+  /**
+   * Navigate to a route, replacing the current history entry
+   */
+  replace(to: string): void {
+    if (typeof window === "undefined") return;
+
+    const newPath = this.normalizePath(to);
+
+    if (newPath === this.currentPath) return;
+
+    // Replace current history entry
+    window.history.replaceState({}, "", newPath);
+
+    // Update current path
+    this.currentPath = newPath;
+
+    // Notify listeners
+    this.notifyListeners();
+  }
+
+  /**
+   * Redirect to the not-found page
+   */
+  notFound(): void {
+    if (typeof window === "undefined") return;
+
+    // Don't redirect to not-found if we're already there
+    if (this.currentPath === "/notfound") return;
+
+    console.log(`[Router] Redirecting to not-found page`);
+    this.replace("/notfound");
   }
 
   /**

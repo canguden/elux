@@ -6,117 +6,6 @@
     <title>Elux App</title>
     <link rel="stylesheet" href="/styles/globals.css" type="text/css" />
     <!-- ELUX_HEAD -->
-    <style>
-      #debug-panel {
-        position: fixed;
-        bottom: 0;
-        right: 0;
-        width: 400px;
-        max-height: 300px;
-        overflow: auto;
-        background: rgba(0, 0, 0, 0.8);
-        color: #00ff00;
-        font-family: monospace;
-        font-size: 12px;
-        padding: 10px;
-        z-index: 9999;
-        border-top-left-radius: 4px;
-      }
-      #debug-panel p {
-        margin: 2px 0;
-      }
-      .debug-error {
-        color: #ff0000;
-      }
-      .debug-warn {
-        color: #ffff00;
-      }
-      .debug-success {
-        color: #00ff00;
-      }
-      .loading {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 300px;
-      }
-      .spinner {
-        width: 40px;
-        height: 40px;
-        margin-bottom: 20px;
-        border: 4px solid rgba(0, 0, 0, 0.1);
-        border-left-color: #09f;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      .error-container {
-        padding: 20px;
-        margin: 20px;
-        border: 2px solid #f00;
-        border-radius: 4px;
-        background-color: #fff0f0;
-      }
-      .error-container h2 {
-        color: #f00;
-        margin-top: 0;
-      }
-      .error-container pre {
-        background: #f8f8f8;
-        padding: 10px;
-        overflow: auto;
-        border-radius: 4px;
-      }
-    </style>
-    <script>
-      // Override console methods to display in debug panel
-      window.addEventListener("DOMContentLoaded", () => {
-        const debugPanel = document.createElement("div");
-        debugPanel.id = "debug-panel";
-        document.body.appendChild(debugPanel);
-
-        function addDebugMessage(type, ...args) {
-          const line = document.createElement("p");
-          line.className = `debug-${type}`;
-          line.textContent = args
-            .map((arg) =>
-              typeof arg === "object" ? JSON.stringify(arg) : String(arg)
-            )
-            .join(" ");
-          debugPanel.appendChild(line);
-          debugPanel.scrollTop = debugPanel.scrollHeight;
-
-          // Keep only latest 100 messages
-          if (debugPanel.children.length > 100) {
-            debugPanel.removeChild(debugPanel.children[0]);
-          }
-        }
-
-        const originalLog = console.log;
-        const originalError = console.error;
-        const originalWarn = console.warn;
-
-        console.log = function (...args) {
-          originalLog.apply(console, args);
-          addDebugMessage("log", ...args);
-        };
-
-        console.error = function (...args) {
-          originalError.apply(console, args);
-          addDebugMessage("error", ...args);
-        };
-
-        console.warn = function (...args) {
-          originalWarn.apply(console, args);
-          addDebugMessage("warn", ...args);
-        };
-      });
-    </script>
   </head>
   <body>
     <div id="app">
@@ -124,7 +13,7 @@
       <!-- ELUX_APP -->
     </div>
 
-    <!-- Use the rebuilt framework -->
-    <script type="module" src="/elux/runtime.tsx"></script>
+    <!-- Use the client entry point -->
+    <script type="module" src="/elux/client/index.ts"></script>
   </body>
 </html>

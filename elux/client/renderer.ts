@@ -631,3 +631,67 @@ export function jsx(
 
 // Support JSX in dev mode
 export const jsxDEV = jsx;
+
+// Function to render a component VNode
+function renderComponent(vnode: VNode): VNode {
+  const Component = vnode.tag as Function;
+
+  // Set currently rendering component
+  const prevComponent = currentComponent;
+  currentComponent = Component;
+
+  // Execute component with the same props to get fresh output
+  const renderedOutput = Component(vnode.props || {});
+
+  // Reset current component
+  currentComponent = prevComponent;
+
+  return renderedOutput;
+}
+
+// Function to unmount a component
+function unmountComponent(vnode: VNode): void {
+  const Component = vnode.tag as Function;
+
+  // Remove from component map
+  componentVNodeMap.delete(Component);
+
+  // Unmount children
+  if (vnode.children) {
+    for (const child of vnode.children) {
+      unmountVNode(child);
+    }
+  }
+}
+
+// Function to unmount a VNode
+function unmountVNode(vnode: VNode): void {
+  if (!vnode) return;
+
+  // Different handling based on node type
+  if (vnode.type === VNodeType.COMPONENT) {
+    unmountComponent(vnode);
+  } else if (vnode.type === VNodeType.ELEMENT) {
+    // Remove event listeners
+    if (vnode.props) {
+      for (const [key, value] of Object.entries(vnode.props)) {
+        if (key.startsWith("on") && typeof value === "function" && vnode._el) {
+          const eventName = key.substring(2).toLowerCase();
+          (vnode._el as Element).removeEventListener(eventName, value);
+        }
+      }
+    }
+
+    // Unmount children
+    if (vnode.children) {
+      for (const child of vnode.children) {
+        unmountVNode(child);
+      }
+    }
+  }
+
+  // Remove element from DOM
+  if (vnode._el && vnode._el.parentNode) {
+    vnode._el.parentNode.removeChild(vnode._el);
+  }
+}

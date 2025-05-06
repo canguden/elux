@@ -4,9 +4,11 @@ import dotenv from "dotenv";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import chalk from "chalk";
+import { fileURLToPath } from "url";
 
 // Get current directory
-// const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -197,6 +199,15 @@ async function renderPage(pagePath: string, params: Record<string, any> = {}) {
       }
     }
 
+    // For notfound page, ensure we always try to use the root layout if there's no specific layout
+    if (pagePath.includes("notfound.tsx") && !layoutModule) {
+      const rootLayoutPath = path.join(process.cwd(), "app", "layout.tsx");
+      if (fs.existsSync(rootLayoutPath)) {
+        layoutModule = await importModule(rootLayoutPath);
+        logger.debug(`Using root layout for notfound page`);
+      }
+    }
+
     // Get page props if getServerSideProps exists
     let pageProps = {};
     if (pageModule.getServerSideProps) {
@@ -261,19 +272,19 @@ async function renderPage(pagePath: string, params: Record<string, any> = {}) {
     }
 
     // Import the renderToString function from elux
-    const eluxCore = await importModule(
-      path.join(process.cwd(), "elux", "core.ts")
+    const eluxServer = await importModule(
+      path.join(process.cwd(), "elux", "server", "index.ts")
     );
 
-    if (!eluxCore || typeof eluxCore.renderToString !== "function") {
+    if (!eluxServer || typeof eluxServer.renderToString !== "function") {
       throw new Error(
-        `renderToString function not found in elux/core.ts - got: ${JSON.stringify(
-          Object.keys(eluxCore || {})
+        `renderToString function not found in elux/server/index.ts - got: ${JSON.stringify(
+          Object.keys(eluxServer || {})
         )}`
       );
     }
 
-    const { renderToString } = eluxCore;
+    const { renderToString } = eluxServer;
 
     // Render the page component
     try {
@@ -372,7 +383,7 @@ async function renderPage(pagePath: string, params: Record<string, any> = {}) {
           </head>
           <body>
             <div id="app">${renderedHTML}</div>
-            <script type="module" src="/elux/runtime.tsx"></script>
+            <script type="module" src="/elux/client/index.ts"></script>
           </body>
         </html>
       `;
@@ -482,6 +493,19 @@ async function handleRoute(req: express.Request, res: express.Response) {
       logger.debug(`Trying alternative path: ${pagePath}`);
       if (!fs.existsSync(pagePath)) {
         logger.error(`No page file found for route: ${route}`);
+
+        // Check for a custom notfound page
+        const notFoundPath = path.join(process.cwd(), "app", "notfound.tsx");
+        if (fs.existsSync(notFoundPath)) {
+          logger.debug(`Using custom notfound page at: ${notFoundPath}`);
+          // Render the notfound page with the path parameter
+          const params = { route, path: route };
+          const content = await renderPage(notFoundPath, params);
+          res.status(404).send(content);
+          return;
+        }
+
+        // Fallback to generic 404 page if no custom notfound page
         res.status(404).send(`
           <html>
             <head>
@@ -784,7 +808,30 @@ async function start() {
         return;
       }
 
-      // Handle all other routes with our route handler
+      // Check if the path contains an existing route based on our filesystem routes
+      const routePath = req.path === "/" ? "/page.tsx" : `${req.path}/page.tsx`;
+      const fullPath = path.join(process.cwd(), "app", routePath);
+
+      // If path doesn't exist and we have a notfound page, use it
+      if (!fs.existsSync(fullPath)) {
+        const notFoundPath = path.join(process.cwd(), "app", "notfound.tsx");
+        if (fs.existsSync(notFoundPath)) {
+          logger.debug(`Route ${req.path} not found, using notfound page`);
+          // Render the notfound page with the path parameter
+          const params = { path: req.path };
+          renderPage(notFoundPath, params)
+            .then((content) => {
+              res.status(404).send(content);
+            })
+            .catch((err) => {
+              logger.error(`Error rendering notfound page: ${err}`);
+              next(); // Fall back to regular handler
+            });
+          return;
+        }
+      }
+
+      // For existing routes or when no notfound page is available
       handleRoute(req, res);
     });
 

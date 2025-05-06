@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elux Debug Page</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      h1 {
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+      }
+      #app {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        min-height: 200px;
+        margin: 20px 0;
+      }
+      pre {
+        background: #f5f5f5;
+        padding: 10px;
+        overflow: auto;
+        border-radius: 4px;
+      }
+      .error {
+        color: red;
+        font-weight: bold;
+      }
+      .success {
+        color: green;
+        font-weight: bold;
+      }
+      #log {
+        margin-top: 20px;
+        border-top: 1px solid #eee;
+        padding-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Elux Debug Page</h1>
+
+    <div>
+      <p>
+        Basic HTML page for testing the routing system with minimal
+        dependencies.
+      </p>
+      <button onclick="testHomepage()">Test Homepage Import</button>
+      <button onclick="testNotFound()">Test NotFound Import</button>
+      <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div id="app">
+      <!-- This is where components will render -->
+      <p>Component will render here</p>
+    </div>
+
+    <div id="log">
+      <h3>Debug Log</h3>
+      <div id="log-content"></div>
+    </div>
+
+    <script>
+      // Simple logging function
+      function log(message, type = "info") {
+        const logContent = document.getElementById("log-content");
+        const entry = document.createElement("div");
+        entry.className = type;
+        entry.textContent = `[${new Date().toISOString()}] ${message}`;
+        logContent.appendChild(entry);
+        console.log(`[${type}]`, message);
+      }
+
+      function clearLog() {
+        document.getElementById("log-content").innerHTML = "";
+      }
+
+      // Test importing the homepage
+      async function testHomepage() {
+        try {
+          log("Testing homepage import...");
+          const module = await import("./app/page.js");
+          log("Homepage module imported successfully", "success");
+          log("Module content: " + JSON.stringify(Object.keys(module)));
+
+          if (module.default) {
+            log("Default export found", "success");
+          } else {
+            log("No default export in module", "error");
+          }
+        } catch (error) {
+          log("Error importing homepage: " + error.message, "error");
+          log("Stack: " + error.stack, "error");
+        }
+      }
+
+      // Test importing the notfound page
+      async function testNotFound() {
+        try {
+          log("Testing notfound page import...");
+          const module = await import("./app/notfound.js");
+          log("NotFound module imported successfully", "success");
+          log("Module content: " + JSON.stringify(Object.keys(module)));
+
+          if (module.default) {
+            log("Default export found", "success");
+          } else {
+            log("No default export in module", "error");
+          }
+        } catch (error) {
+          log("Error importing notfound page: " + error.message, "error");
+          log("Stack: " + error.stack, "error");
+        }
+      }
+
+      // Log initial information
+      log("Debug page loaded. Available routes in routes.ts:");
+      log("/ → ../app/page");
+      log("/about → ../app/about/page");
+      log("/docs → ../app/docs/page");
+      log("/notfound → ../app/notfound");
+    </script>
+  </body>
+</html>

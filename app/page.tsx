@@ -1,80 +1,115 @@
-
+/** @jsx h */
 import { h } from "../elux/core/vdom";
-import { Link } from "../elux/Link";
-import { SSRContext } from "../elux/core";
-import { Counter } from "./components/Counter";
+import Link from "../elux/Link";
 import { eState } from "../elux/core/context";
 
-// Define the type for our page props
-
-// Home page component that gets data automatically from context
 export default function HomePage() {
-  // Use direct state hooks for the values we need
-  const [getTitle] = eState<string>("title", "Elux Framework");
-  const [getDescription] = eState<string>(
-    "description",
-    "Built from scratch to set you free — Elux is a fully hackable, transparent framework made by developers, for developers. No black boxes. No limits. Just pure control and creativity."
-  );
-  const [getCount] = eState<number>("count", 0);
+  // Use state hooks
+  const [getTitle] = eState<string>("title", "Welcome to Elux Framework");
+  const [getCount, setCount] = eState<number>("count", 0);
+
+  // Increment counter function
+  const incrementCount = () => {
+    setCount(getCount() + 1);
+  };
 
   return (
-    <div className="container">
-      <header className="py-4 text-center mb-4">
-        <h1 className="text-2xl font-bold mb-2">{getTitle()}</h1>
-        <p className="text-muted-foreground">{getDescription()}</p>
-      </header>
+    <div className="container mx-auto p-4">
+      <div className="max-w-4xl mx-auto">
+        <header className="mb-8 text-center">
+          <h1 className="text-4xl font-bold mb-4">{getTitle()}</h1>
+          <p className="text-xl mb-6">
+            A TypeScript-first framework with file-based routing
+          </p>
+        </header>
 
-      <section className="mb-4">
-        <div className="card card-default">
-          <h3 className="card-title">Welcome to Elux Framework 1.0</h3>
-          <p>A lightweight framework with custom VDOM implementation</p>
-        </div>
+        <section className="bg-gray100 p-6 rounded-lg shadow mb-8">
+          <h2 className="text-2xl font-semibold mb-4">File-Based Routing</h2>
+          <p className="mb-4">
+            Elux uses a Next.js-inspired file-based routing system. Pages are
+            automatically registered based on their file path in the{" "}
+            <code className="bg-gray200 px-1">app</code> directory.
+          </p>
+          <ul className="list-disc pl-6 mb-4">
+            <li className="mb-2">
+              <code className="bg-gray200 px-1">app/page.tsx</code> →{" "}
+              <code className="bg-gray200 px-1">/</code>
+            </li>
+            <li className="mb-2">
+              <code className="bg-gray200 px-1">app/about/page.tsx</code> →{" "}
+              <code className="bg-gray200 px-1">/about</code>
+            </li>
+            <li className="mb-2">
+              <code className="bg-gray200 px-1">app/blog/[slug]/page.tsx</code>{" "}
+              → <code className="bg-gray200 px-1">/blog/:slug</code>
+            </li>
+          </ul>
+        </section>
 
-        <Counter initialCount={getCount()} />
-
-        <div className="grid gap-4 mt-4">
-          <div className="card card-default">
-            <h3 className="card-title">💡 Custom Render</h3>
-            <p>
-              Built with a lightweight VDOM implementation, no React needed.
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-gray100 p-6 rounded-lg shadow">
+            <h2 className="text-2xl font-semibold mb-4">Navigation</h2>
+            <p className="mb-4">
+              Use the <code className="bg-gray200 px-1">Link</code> component
+              for client-side navigation:
             </p>
+            <div className="flex space-x-4">
+              <Link href="/about" className="btn btn-primary">
+                About
+              </Link>
+              <Link href="/docs" className="btn btn-secondary">
+                Docs
+              </Link>
+              <Link href="/test" className="btn btn-secondary">
+                Test
+              </Link>
+            </div>
           </div>
-          <div className="card card-default">
-            <h3 className="card-title">🔥 Signal-based State</h3>
-            <p>Reactive programming with fine-grained updates.</p>
-          </div>
-          <div className="card card-default">
-            <h3 className="card-title">⚡ File-based Routing</h3>
-            <p>Intuitive app directory structure.</p>
-          </div>
-        </div>
-      </section>
 
-      <div className="flex justify-center gap-4 mt-4 mb-4">
-        <Link href="/about" className="btn btn-primary">
-          About Us
-        </Link>
-        <Link href="/docs" className="btn btn-outline">
-          Documentation
-        </Link>
-        <Link href="/test" className="btn btn-outline">
-          Test
-        </Link>
+        
+
+          <div className="bg-gray100 p-6 rounded-lg shadow">
+            <h2 className="text-2xl font-semibold mb-4">State Management</h2>
+            <p className="mb-4">
+              Elux includes a simple but powerful state management system:
+            </p>
+            <div className="mb-4 flex justify-center">
+              <p className="text-primary text-lg font-bold mb-2">
+                Count: {getCount()}
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <button onClick={incrementCount} className="btn btn-primary">
+                Increment Counter
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-gray100 p-6 rounded-lg shadow">
+          <h2 className="text-2xl font-semibold mb-4">Client-Side Features</h2>
+          <ul className="list-disc pl-6">
+            <li className="mb-2">Automatic route detection</li>
+            <li className="mb-2">Client-side navigation without page reload</li>
+            <li className="mb-2">
+              Dynamic route params (e.g.,{" "}
+              <code className="bg-gray200 px-1">/blog/:slug</code>)
+            </li>
+            <li className="mb-2">Nested layouts support</li>
+            <li className="mb-2">404 page handling for missing routes</li>
+          </ul>
+        </section>
       </div>
     </div>
   );
 }
 
-// Server-side data fetching - similar to Next.js getServerSideProps
-export async function getServerSideProps(context: SSRContext) {
-  console.log("getServerSideProps called with context:", context);
-
-  // This data will be automatically available to the component via usePageProps()
+// For server-side rendering
+export async function getStaticProps() {
   return {
     props: {
-      title: "Elux - A Lightweight Framework",
-      description: "A fully hackable TypeScript-first framework from scratch",
-      count: 0,
+      title: "Elux - A TypeScript Framework",
+      description: "A modern, lightweight framework with file-based routing.",
     },
   };
 }

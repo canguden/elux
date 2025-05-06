@@ -1,21 +1,12 @@
 // Component loader - responsible for dynamically loading components
 import { h, VNode } from "./renderer";
 
-// Import base components - these don't change frequently
-import HomePage from "../../app/page";
-import AboutPage from "../../app/about/page";
-import { Counter } from "../../app/components/Counter";
-import { Demo } from "../../app/components/Demo";
+// NO HARD-CODED IMPORTS - Let everything be dynamic
+// This avoids having to manually update this file when adding/removing components
 
 // -----------------------------------------------------------
 // Automatic Component Discovery System
 // -----------------------------------------------------------
-
-// Dynamic route pattern detector
-const ROUTE_PATTERNS = [
-  { pattern: /^\/$/i, component: HomePage },
-  { pattern: /^\/about\/?$/i, component: AboutPage },
-];
 
 // This map will be auto-populated with discovered components
 const discoveredComponents: Map<string, any> = new Map();
@@ -79,16 +70,6 @@ async function discoverRoute(route: string): Promise<any> {
     `[Auto-Discovery] Attempting to discover route component for: ${route}`
   );
 
-  // Check static patterns first
-  for (const { pattern, component } of ROUTE_PATTERNS) {
-    if (pattern.test(route)) {
-      console.log(
-        `[Auto-Discovery] Found static route pattern match for: ${route}`
-      );
-      return component;
-    }
-  }
-
   // Generate possible paths from route
   const normalizedRoute = route === "/" ? "" : route;
   const possiblePaths = [
@@ -116,9 +97,6 @@ async function discoverRoute(route: string): Promise<any> {
   for (const path of possiblePaths) {
     const component = await discoverComponent(path);
     if (component) {
-      // Register this route pattern for future use
-      const pattern = new RegExp(`^${route}\\/?$`, "i");
-      ROUTE_PATTERNS.push({ pattern, component });
       return component;
     }
   }
@@ -133,14 +111,8 @@ async function discoverRoute(route: string): Promise<any> {
 // Standard Component Interfaces
 // -----------------------------------------------------------
 
-// Component cache to avoid reloading
-const componentCache: Record<string, any> = {
-  // Initialize cache with known components
-  "/": HomePage,
-  "/about": AboutPage,
-  "components/Counter": Counter,
-  "components/Demo": Demo,
-};
+// Component cache to avoid reloading - initialized empty
+const componentCache: Record<string, any> = {};
 
 // Error component to show when a component fails to load
 export function ErrorComponent({
@@ -173,6 +145,11 @@ export function ErrorComponent({
       error instanceof Error
         ? `${error.message}\n${error.stack}`
         : String(error)
+    ),
+    h(
+      "p",
+      { style: { marginTop: "10px" } },
+      "This component failed to load. Check the console for more details."
     )
   );
 }
@@ -244,49 +221,58 @@ export function LoadingComponent(): VNode {
     "div",
     {
       style: {
-        padding: "15px",
-        margin: "10px 0",
-        borderRadius: "4px",
-        backgroundColor: "#f0f0f0",
-        border: "1px solid #ccc",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        flexDirection: "column",
+        padding: "40px 0",
       },
     },
-    h("p", { style: { margin: 0 } }, "Loading component...")
+    h("div", {
+      style: {
+        width: "40px",
+        height: "40px",
+        border: "4px solid #f3f3f3",
+        borderTop: "4px solid #3498db",
+        borderRadius: "50%",
+        animation: "spin 1s linear infinite",
+      },
+    }),
+    h(
+      "style",
+      null,
+      "@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }"
+    ),
+    h("p", { style: { marginTop: "15px", color: "#555" } }, "Loading...")
   );
 }
 
-// Load a page component from the app directory
+// Load a page component by route
 export async function loadPageComponent(route: string): Promise<any> {
-  console.log(`[Component Loader] Loading page component for route: ${route}`);
-
-  // Check if component is already in cache
+  // Check if we have it cached
   if (componentCache[route]) {
-    console.log(
-      `[Component Loader] Returning cached component for route: ${route}`
-    );
     return componentCache[route];
   }
 
-  // Try auto-discovery
-  const discoveredComponent = await discoverRoute(route);
-  if (discoveredComponent) {
-    console.log(
-      `[Component Loader] Auto-discovered component for route: ${route}`
+  try {
+    // Try to discover the component for this route
+    const component = await discoverRoute(route);
+
+    if (component) {
+      // Cache for future use
+      componentCache[route] = component;
+      return component;
+    }
+
+    // No component found
+    return null;
+  } catch (error) {
+    console.error(
+      `[ComponentLoader] Failed to load page for route ${route}:`,
+      error
     );
-    componentCache[route] = discoveredComponent;
-    return discoveredComponent;
+    return null;
   }
-
-  // If still not found, fall back to hardcoded options
-  if (route === "/") {
-    return HomePage;
-  } else if (route === "/about") {
-    return AboutPage;
-  }
-
-  // Return 404 component as last resort
-  console.warn(`[Component Loader] No component found for route: ${route}`);
-  return () => NotFoundComponent({ route });
 }
 
 // Load a component by its path relative to the app directory
@@ -311,21 +297,13 @@ export async function loadComponent(relativePath: string): Promise<any> {
       `[Component Loader] Auto-discovered component: ${relativePath}`
     );
     discoveredComponents.set(relativePath, discoveredComponent);
+    componentCache[relativePath] = discoveredComponent;
     return discoveredComponent;
   }
 
-  // Fallback to known components
-  if (relativePath === "components/Counter") {
-    return Counter;
-  }
-
-  if (relativePath === "components/Demo") {
-    return Demo;
-  }
-
-  // Log an error for any other components not found
+  // Log an error for any component not found
   console.error(`[Component Loader] Component not found: ${relativePath}`);
   throw new Error(
-    `Component ${relativePath} not found in static imports or auto-discovery`
+    `Component ${relativePath} not found - please check the file exists`
   );
 }

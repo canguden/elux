@@ -16,7 +16,8 @@
     "noFallthroughCasesInSwitch": true,
     "jsx": "react",
     "jsxFactory": "h",
-    "jsxFragmentFactory": "Fragment"
+    "jsxFragmentFactory": "Fragment",
+    "esModuleInterop": true
   },
   "ts-node": {
     "esm": true,
