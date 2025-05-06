@@ -39,8 +39,7 @@ export default function RootLayout({ children }: LayoutProps) {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="mb-4 md:mb-0">
               <p>
-                © {new Date().getFullYear()} elux Framework. All rights
-                reserved.
+                {new Date().getFullYear()} elux Framework. All rights reserved.
               </p>
             </div>
 
