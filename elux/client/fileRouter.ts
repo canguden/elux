@@ -238,42 +238,27 @@ export async function renderCurrentRoute() {
     return;
   }
 
-  // Show loading indicator
-  const loadingIndicator = document.createElement("div");
-  loadingIndicator.className = "loading-indicator";
-  loadingIndicator.style.display = "flex";
-  loadingIndicator.style.justifyContent = "center";
-  loadingIndicator.style.alignItems = "center";
-  loadingIndicator.style.height = "50vh";
-
-  const spinner = document.createElement("div");
-  spinner.className = "spinner";
-  spinner.style.width = "40px";
-  spinner.style.height = "40px";
-  spinner.style.border = "4px solid rgba(0, 0, 0, 0.1)";
-  spinner.style.borderRadius = "50%";
-  spinner.style.borderTopColor = "#3498db";
-  spinner.style.animation = "spin 1s linear infinite";
-
-  // Add keyframes for spinner animation if not already in the document
-  if (!document.getElementById("spinner-keyframes")) {
-    const style = document.createElement("style");
-    style.id = "spinner-keyframes";
-    style.textContent = `
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  loadingIndicator.appendChild(spinner);
-
-  // Clear root element and add loading indicator
-  rootElement.innerHTML = "";
-  rootElement.appendChild(loadingIndicator);
-
   try {
+    // Show loading indicator
+    const loadingIndicator = document.createElement("div");
+    loadingIndicator.className = "loading-indicator";
+    loadingIndicator.innerHTML = `
+      <div style="display: flex; justify-content: center; align-items: center; height: 50vh;">
+        <div style="width: 40px; height: 40px; border: 4px solid rgba(0, 0, 0, 0.1); 
+                   border-radius: 50%; border-top: 4px solid #3498db; 
+                   animation: spin 1s linear infinite;"></div>
+      </div>
+      <style>
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      </style>
+    `;
+
+    // Clear root element and add loading indicator
+    rootElement.innerHTML = "";
+    rootElement.appendChild(loadingIndicator);
+
     // Find the matching route
     const { route, params } = getRouteAndParams(pathname, typedRoutes);
     print(`[FileRouter] Route match result:`, { route, params });
@@ -283,14 +268,17 @@ export async function renderCurrentRoute() {
       print(`[FileRouter] No route found for ${pathname}, showing 404 page`);
 
       try {
-        // Try to load the not-found page if available
         if (typedRoutes["/notfound"]) {
           const notFoundModule = await typedRoutes["/notfound"]();
           const NotFoundPage = notFoundModule.default;
 
           if (NotFoundPage) {
-            // Render the not-found page
+            // Remove the loading indicator
+            rootElement.innerHTML = "";
+
+            // Directly render the NotFoundPage without layout for now
             mount(h(NotFoundPage, { path: pathname }), rootElement);
+            print(`[FileRouter] Mounted not-found page`);
           } else {
             rootElement.innerHTML = `
               <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
@@ -301,7 +289,6 @@ export async function renderCurrentRoute() {
             `;
           }
         } else {
-          // Fallback 404 if no not-found page exists
           rootElement.innerHTML = `
             <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
               <h1>Page Not Found</h1>
@@ -328,7 +315,7 @@ export async function renderCurrentRoute() {
     print(`[FileRouter] Loading route module for ${route}`);
     const routeModule = await typedRoutes[route]();
 
-    // Check if we actually got a module and it has a default export
+    // Check if we actually got a module
     if (!routeModule || !routeModule.default) {
       printError(
         `[FileRouter] Route module for ${route} doesn't have a default export`
@@ -347,34 +334,74 @@ export async function renderCurrentRoute() {
     const PageComponent = routeModule.default;
     print(`[FileRouter] Loaded page component for ${route}`);
 
-    // Remove the loading indicator
-    const loadingElem = rootElement.querySelector(".loading-indicator");
-    if (loadingElem) {
-      rootElement.removeChild(loadingElem);
-    }
-
-    // Create props including params and any getStaticProps/getServerSideProps data
+    // Create props including params
     const props = { params, ...params };
 
+    // Step 1: Try to render just the page component first to ensure it works
     try {
-      // Render the page component
+      // Remove loading indicator
+      rootElement.innerHTML = "";
+
+      // First render just the page to make sure it works
+      print(
+        `[FileRouter] First rendering just the page component to verify it works`
+      );
+
       if (typeof PageComponent === "function") {
-        // If it's a component function, render it
         mount(h(PageComponent, props), rootElement);
-        print(`[FileRouter] Mounted page component for ${route}`);
-      } else {
-        // Handle non-function components
-        printError(
-          `[FileRouter] Page component for ${route} is not a function:`,
-          PageComponent
-        );
-        rootElement.innerHTML = `
-          <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
-            <h1>Page Error</h1>
-            <p>The page at <code>${pathname}</code> couldn't be rendered.</p>
-            <p><a href="/">Go Home</a></p>
-          </div>
-        `;
+        print(`[FileRouter] Basic page component rendered successfully`);
+
+        // Step 2: Now try to apply layouts
+        // We'll do this with a slight delay to ensure the page is visible first
+        setTimeout(async () => {
+          try {
+            print(`[FileRouter] Now attempting to apply layouts`);
+
+            // First try the root layout
+            let RootLayout = null;
+            try {
+              print(`[FileRouter] Looking for root layout at app/layout.tsx`);
+              // Use a direct import path with .tsx extension to avoid Vite issues
+              const rootLayoutModule = await import("../../app/layout.tsx");
+              RootLayout = rootLayoutModule.default;
+              print(
+                `[FileRouter] Found root layout: ${RootLayout ? "Yes" : "No"}`
+              );
+            } catch (err) {
+              print(`[FileRouter] No root layout found: ${err}`);
+            }
+
+            if (RootLayout) {
+              // Create page element
+              const pageElement = h(PageComponent, props);
+
+              // Apply the layout
+              print(`[FileRouter] Applying root layout to page`);
+              // First save the current page content in case layout fails
+              const currentContent = rootElement.innerHTML;
+
+              try {
+                rootElement.innerHTML = "";
+                mount(h(RootLayout, { children: pageElement }), rootElement);
+                print(`[FileRouter] Root layout applied successfully`);
+              } catch (layoutError) {
+                printError(
+                  `[FileRouter] Error applying root layout:`,
+                  layoutError
+                );
+
+                // Restore page content without layout
+                rootElement.innerHTML = currentContent;
+                print(
+                  `[FileRouter] Restored original page content after layout error`
+                );
+              }
+            }
+          } catch (layoutError) {
+            printError(`[FileRouter] Error in layout processing:`, layoutError);
+            // Page is already rendered, so we can leave it as is
+          }
+        }, 50);
       }
     } catch (renderError) {
       printError(
@@ -391,15 +418,17 @@ export async function renderCurrentRoute() {
       `;
     }
   } catch (error) {
-    // Handle any errors that occurred during route handling
+    // Handle any top-level errors that occurred during route handling
     printError("[FileRouter] Error rendering route:", error);
-    rootElement.innerHTML = `
-      <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
-        <h1>Routing Error</h1>
-        <p>An error occurred while loading the page at <code>${pathname}</code>.</p>
-        <p><pre>${error}</pre></p>
-        <p><a href="/">Go Home</a></p>
-      </div>
-    `;
+    if (rootElement) {
+      rootElement.innerHTML = `
+        <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
+          <h1>Routing Error</h1>
+          <p>An error occurred while loading the page at <code>${pathname}</code>.</p>
+          <p><pre>${error}</pre></p>
+          <p><a href="/">Go Home</a></p>
+        </div>
+      `;
+    }
   }
 }

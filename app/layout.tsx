@@ -1,7 +1,7 @@
 /** @jsx h */
 import { h } from "../elux/core/vdom";
-import { DebugPanel } from "../elux/dev";
 import Link from "../elux/Link";
+import { Counter } from "./components/Counter";
 
 interface LayoutProps {
   children: any;
@@ -36,6 +36,7 @@ export default function RootLayout({ children }: LayoutProps) {
 
       {/* Main content */}
       <main className="flex-1 pb-8">{children}</main>
+      <Counter />
 
       {/* Footer */}
       <footer className="bg-white dark:bg-gray900 border-t border-gray300 dark:border-gray700 mt-auto">
@@ -67,8 +68,6 @@ export default function RootLayout({ children }: LayoutProps) {
           </div>
         </div>
       </footer>
-
-      <DebugPanel />
     </div>
   );
 }
