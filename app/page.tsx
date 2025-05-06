@@ -5,7 +5,6 @@ import { eState } from "../elux/core/context";
 import { Counter } from "./components/Counter";
 import { Todo } from "./components/Todo";
 
-
 export default function HomePage() {
   // Use state hooks
   const [getTitle] = eState<string>("title", "Welcome to elux Framework");
@@ -19,8 +18,6 @@ export default function HomePage() {
             A TypeScript-first framework with file-based routing
           </p>
         </header>
-
-
 
         <section className="bg-gray100 p-6 rounded-lg shadow mb-8">
           <h2 className="text-2xl font-semibold mb-4">File-Based Routing</h2>
@@ -56,9 +53,7 @@ export default function HomePage() {
               <Link href="/about" className="btn btn-primary">
                 About
               </Link>
-              <Link href="/docs" className="btn btn-secondary">
-                Docs
-              </Link>
+
               <Link href="/test" className="btn btn-secondary">
                 Test 404
               </Link>

@@ -14,17 +14,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const appDir = process.env.APP_DIR || path.resolve(process.cwd(), "app");
 
+// Check for quiet mode
+const isQuietMode =
+  process.argv.includes("--quiet") || process.argv.includes("-q");
+
+// Custom logger that respects quiet mode
+const log = {
+  info: (...args: unknown[]) => {
+    if (!isQuietMode) console.log(...args);
+  },
+  error: (...args: unknown[]) => console.error(...args), // Always show errors
+};
+
 // Function to generate the routes file
 async function generateRoutesFile() {
   try {
-    console.log(`Scanning directory: ${appDir}`);
+    log.info(`Scanning directory: ${appDir}`);
 
     // Generate route map using our routeBuilder
     const routeMap = generateRouteMap(appDir);
 
     // Ensure we have the notfound route
     if (!routeMap["/notfound"]) {
-      console.log(`Adding missing /notfound route`);
+      log.info(`Adding missing /notfound route`);
       routeMap["/notfound"] = () => import("../app/notfound");
     }
 
@@ -74,13 +86,13 @@ export default routes;
     const outputPath = path.resolve(__dirname, "routes.ts");
     fs.writeFileSync(outputPath, routesContent, "utf8");
 
-    console.log(`✅ Routes generated successfully: ${outputPath}`);
-    console.log(`Found ${Object.keys(routeMap).length} routes:`);
+    log.info(`✅ Routes generated successfully: ${outputPath}`);
+    log.info(`Found ${Object.keys(routeMap).length} routes:`);
     Object.keys(routeMap).forEach((route) => {
-      console.log(`  ${route}`);
+      log.info(`  ${route}`);
     });
   } catch (error) {
-    console.error("❌ Error generating routes file:", error);
+    log.error("❌ Error generating routes file:", error);
     process.exit(1);
   }
 }
