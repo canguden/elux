@@ -1,5 +1,6 @@
 /** @jsx h */
 import { h } from "../elux/core/vdom";
+import { DebugPanel } from "../elux/dev";
 import Link from "../elux/Link";
 
 interface LayoutProps {
@@ -9,16 +10,16 @@ interface LayoutProps {
 
 export default function RootLayout({ children }: LayoutProps) {
   return (
-    <div className="min-h-screen flex flex-col bg-light dark:bg-gray800 text-gray900 dark:text-white">
+    <div className="min-h-screen flex flex-col bg-light dark:bg-gray800 text-gray900 dark:text-white mb-4">
       {/* Header */}
       <header className="bg-white dark:bg-gray900 shadow">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <Link href="/" className="text-2xl font-bold text-primary">
-              Elux
+              elux
             </Link>
 
-            <nav className="flex space-x-6 gap-6">
+            <nav className="flex space-x-6 gap-4">
               <Link href="/" className="hover:text-primary">
                 Home
               </Link>
@@ -42,14 +43,14 @@ export default function RootLayout({ children }: LayoutProps) {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="mb-4 md:mb-0">
               <p>
-                © {new Date().getFullYear()} Elux Framework. All rights
+                © {new Date().getFullYear()} elux Framework. All rights
                 reserved.
               </p>
             </div>
 
             <div className="flex gap-4">
               <a
-                href="https://github.com"
+                href="https://github.com/canguden/elux"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-primary"
@@ -66,6 +67,8 @@ export default function RootLayout({ children }: LayoutProps) {
           </div>
         </div>
       </footer>
+
+      <DebugPanel />
     </div>
   );
 }

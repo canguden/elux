@@ -41,3 +41,27 @@ function initClient() {
 
   print("[Client] Elux client initialized");
 }
+
+// Export client-side rendering functions
+export {
+  h,
+  jsx,
+  createElement,
+  createText,
+  mount,
+  update,
+  VNodeType,
+  getCurrentComponent,
+  setCurrentComponent,
+  renderClientComponent,
+  reRenderComponent,
+} from "./renderer";
+
+// Export client runtime
+export { initClient, hydrateDocument, renderApp } from "./client";
+
+// Export client-side routing
+export { navigate, redirect, initRouter } from "./fileRouter";
+
+// Export JSX runtime
+export * from "./jsx-runtime";

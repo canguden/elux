@@ -3,17 +3,23 @@
  * Central export point for core functionality
  */
 
-// Export from core modules
-export { h } from "./vdom";
-export { createPageContext, eState, usePageProps } from "./context";
-export { createSignal, createStore } from "./signals";
+// Export core modules
+export * from "./vdom";
+export * from "./context";
 export * from "./router";
+export * from "./components";
 
-// Export from runtime
-export { initElux } from "./runtime";
+// Export signals API
+export * from "./signals";
 
-// Export utility functions
-export { print, printError } from "./utils";
+// Export helper utilities
+export * from "./utils";
+
+// Export runtime system
+export * from "./runtime";
+
+// Export route builder
+export { buildRoutes, generateRouteMap } from "./routeBuilder";
 
 // Export types
 export type { RouteComponent, RouteNode } from "./routeBuilder";

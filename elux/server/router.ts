@@ -301,3 +301,55 @@ export class Router {
 
 // Export a singleton router instance
 export const router = new Router();
+
+/**
+ * Handle a server request and route it to the appropriate handler
+ */
+export async function handleRequest(req: any, res: any): Promise<void> {
+  try {
+    const url = req.url;
+    const router = new Router();
+    
+    // Scan routes from app directory
+    await router.scanRoutes("app");
+    
+    // Match the route
+    const { route, params } = router.match(url);
+    
+    // Set up the response
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/html');
+    
+    // Load the component
+    const { default: Component } = await route.component();
+    
+    // Create context for SSR
+    const ssrContext = {
+      req,
+      res,
+      params,
+      url,
+      isSSR: !!route.meta.ssr,
+      isSSG: !!route.meta.ssg
+    };
+    
+    // Simple rendering - a real implementation would use the rendering engine
+    let html = '<!DOCTYPE html><html><head><title>Elux App</title></head><body>';
+    
+    // Add the rendered component
+    html += `<div id="app">${Component(params)}</div>`;
+    
+    // Close tags
+    html += '</body></html>';
+    
+    // Send the response
+    res.end(html);
+  } catch (error) {
+    console.error('Error handling request:', error);
+    
+    // Send error response
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'text/html');
+    res.end('<h1>Server Error</h1><p>Something went wrong on the server</p>');
+  }
+}

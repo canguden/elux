@@ -77,6 +77,118 @@ export class Signal<T> {
 
     // Then notify all subscribers about the change
     this.notify();
+    
+    // Force a manual DOM update for critical cases - especially important for counters
+    if (typeof window !== "undefined" && typeof this.value === "number") {
+      this.updateDomDirectly();
+    }
+  }
+
+  /**
+   * Direct DOM updates as a fallback for components that don't re-render properly
+   */
+  private updateDomDirectly(): void {
+    setTimeout(() => {
+      if (typeof window === "undefined" || !document) return;
+
+      try {
+        // Get the value for debugging
+        const valueType = typeof this.value;
+        let valueInfo = "unknown";
+        
+        if (valueType === "number" || valueType === "string" || valueType === "boolean") {
+          valueInfo = String(this.value);
+        } else if (Array.isArray(this.value)) {
+          valueInfo = `array[${this.value.length}]`;
+        } else if (valueType === "object" && this.value !== null) {
+          valueInfo = `object{${Object.keys(this.value as object).join(',')}}`;
+        }
+        
+        print(`[Signals] Direct DOM update for: ${valueInfo} (${valueType})`);
+        
+        // Find all elux components that might need updating
+        const components = document.querySelectorAll("[data-elux-component]");
+        
+        // Dispatch a generic state change event
+        window.dispatchEvent(new CustomEvent('elux-state-changed', {
+          detail: { 
+            value: this.value,
+            valueType,
+            timestamp: Date.now()
+          }
+        }));
+        
+        // Specific handling for common component types
+        
+        // 1. Counter components (number values)
+        if (typeof this.value === "number") {
+          const counterDisplays = document.querySelectorAll("[id^='counter-display']");
+          counterDisplays.forEach(el => {
+            if (el.textContent && el.textContent.includes("Count:")) {
+              const label = el.textContent.split(":")[0];
+              el.textContent = `${label}: ${this.value}`;
+            }
+          });
+        }
+        
+        // 2. Todo components (arrays with specific structure)
+        if (Array.isArray(this.value) && this.value.length > 0 && 
+            typeof this.value[0] === 'object' && 'text' in this.value[0]) {
+          
+          // Find todo containers
+          const todoContainers = document.querySelectorAll("[data-todo-id]");
+          if (todoContainers.length > 0) {
+            // Try to update each container
+            todoContainers.forEach(container => {
+              // Find the todo list element
+              const todoList = container.querySelector('.todo-list');
+              if (!todoList) return;
+              
+              // Update the list if possible
+              const todos = this.value as any[];
+              if (!todos || !Array.isArray(todos)) return;
+              
+              // Only proceed if this looks like our todo items
+              if (todos.length > 0 && 'id' in todos[0] && 'text' in todos[0] && 'completed' in todos[0]) {
+                // Force custom event to trigger component update
+                window.dispatchEvent(new CustomEvent('todo-updated', {
+                  detail: { 
+                    action: 'refresh',
+                    todos: todos,
+                    stableId: container.getAttribute('data-todo-id')
+                  }
+                }));
+              }
+            });
+          }
+        }
+        
+        // 3. Generic component updates - any component might want to listen to state changes
+        components.forEach(component => {
+          try {
+            // Create a component-specific event
+            const componentName = component.getAttribute('data-component-name');
+            if (componentName) {
+              const componentEvent = new CustomEvent('elux-component-update', {
+                bubbles: true,
+                detail: {
+                  componentName,
+                  value: this.value,
+                  valueType,
+                  timestamp: Date.now()
+                }
+              });
+              component.dispatchEvent(componentEvent);
+            }
+          } catch (e) {
+            // Ignore errors in event dispatch
+          }
+        });
+      } catch (e) {
+        // Silently handle any errors in DOM updates
+        printError("[Signals] Error in direct DOM update:", e);
+      }
+    }, 0);
   }
 
   /**
@@ -93,7 +205,11 @@ export class Signal<T> {
     // Notify all regular subscribers
     const subscribers = Array.from(this.subscribers);
     for (const subscriber of subscribers) {
-      subscriber();
+      try {
+        subscriber();
+      } catch (error) {
+        console.error("Error in signal subscriber:", error);
+      }
     }
 
     // Trigger re-renders for component subscribers

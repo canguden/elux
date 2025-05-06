@@ -1,5 +1,6 @@
 // Virtual DOM node types
-import { print, printError, printWarn } from "../core/utils";
+import { print, printError } from "../core/utils";
+import { getComponentMeta } from "../core/components";
 
 export enum VNodeType {
   TEXT,
@@ -35,106 +36,240 @@ const componentVNodeMap = new WeakMap<
   }
 >();
 
-// Export for signal system to use
+// Add a new section for client component handling
+
+/**
+ * Special handling for client components
+ */
+let currentlyRenderingComponent: Function | null = null;
+
+/**
+ * Get the currently rendering component for context tracking
+ */
 export function getCurrentComponent(): Function | null {
-  return currentComponent;
+  return currentlyRenderingComponent;
 }
 
-// Trigger component re-render from signal system
+/**
+ * Set the currently rendering component for context tracking
+ */
+export function setCurrentComponent(component: Function | null): void {
+  currentlyRenderingComponent = component;
+}
+
+/**
+ * Load and render a client component with stable identifier
+ */
+export function renderClientComponent(
+  component: Function,
+  props: Record<string, any>,
+  container: Element
+): void {
+  try {
+    // Import our components system
+    import("../core/components")
+      .then((components) => {
+        const { isClient, getComponentMeta, ComponentType } = components;
+
+        // Only render client components on the client
+        if (!isClient) {
+          return;
+        }
+
+        const meta = getComponentMeta(component);
+
+        // Check if this is a client component
+        if (meta.type === ComponentType.CLIENT) {
+          // Set the component as currently rendering for context
+          setCurrentComponent(component);
+
+          // Generate stable ID from component name and props
+          const stableId =
+            props._elux_component_id ||
+            `${component.name || "component"}-${Math.random()
+              .toString(36)
+              .substring(2, 10)}`;
+
+          // Add a data attribute for hydration
+          if (container instanceof HTMLElement) {
+            container.setAttribute("data-elux-component", "client");
+            container.setAttribute("data-component-id", stableId);
+            container.setAttribute(
+              "data-component-name",
+              component.name || "Anonymous"
+            );
+          }
+
+          // Execute the component function
+          try {
+            const result = component(props);
+
+            // Render the result into the container
+            container.innerHTML = "";
+
+            if (typeof result === "object" && result !== null) {
+              // Handle a VNode result
+              const domNode = createDOMElement(result);
+              if (domNode) {
+                container.appendChild(domNode);
+              }
+            } else if (typeof result === "string") {
+              // Handle string result
+              container.textContent = result;
+            }
+          } catch (error) {
+            console.error(
+              `Error rendering client component ${component.name}:`,
+              error
+            );
+            container.innerHTML = `<div class="error">Error rendering component</div>`;
+          }
+
+          // Reset current component
+          setCurrentComponent(null);
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading component system:", error);
+      });
+  } catch (error) {
+    console.error("Error in renderClientComponent:", error);
+  }
+}
+
+/**
+ * Re-render a specific component for state changes
+ */
 export function reRenderComponent(component: Function): void {
-  print(
-    `Re-rendering component due to signal change: ${
-      component.name || "Component"
-    }`
-  );
+  try {
+    // Find all instances of this component in the DOM
+    if (typeof document === "undefined") {
+      return;
+    }
 
-  const data = componentVNodeMap.get(component);
-  if (data) {
-    const { vnode, container, index } = data;
+    print(
+      `[Renderer] Attempting to re-render component: ${
+        component.name || "Anonymous"
+      }`
+    );
 
-    // Create a new VNode with same props
-    print(`Creating new VNode for component with props:`, vnode.props);
-    const newVNode = createComponent(component, vnode.props || {});
+    const meta = getComponentMeta(component);
+    if (!meta) {
+      print(`[Renderer] No metadata for component, can't re-render`);
+      return;
+    }
 
-    // Store the new VNode in place of the old one
-    componentVNodeMap.set(component, {
-      vnode: newVNode,
-      container,
-      index,
+    // First try to find by instance ID
+    let instances: NodeListOf<Element>;
+    if (meta.instanceId) {
+      instances = document.querySelectorAll(
+        `[data-component-id="${meta.instanceId}"]`
+      );
+      if (instances.length === 0) {
+        // Fallback to finding by component name
+        instances = document.querySelectorAll(
+          `[data-component-name="${component.name || "Anonymous"}"]`
+        );
+      }
+    } else {
+      // No instance ID, try to find by name
+      instances = document.querySelectorAll(
+        `[data-component-name="${component.name || "Anonymous"}"]`
+      );
+    }
+
+    print(
+      `[Renderer] Found ${instances.length} instances of component to re-render`
+    );
+
+    // Re-render each instance
+    instances.forEach((container) => {
+      try {
+        // Try to get the component props from data attributes
+        const props: Record<string, any> = {};
+
+        // Extract props from data attributes if available
+        Array.from(container.attributes).forEach((attr) => {
+          if (attr.name.startsWith("data-prop-")) {
+            const propName = attr.name.replace("data-prop-", "");
+            props[propName] = attr.value;
+          }
+        });
+
+        // Render the component with available props
+        const vnode = h(component, props);
+
+        // Create a new DOM element from the vnode
+        const newElement = createDOMElement(vnode);
+
+        // Replace the existing element with the new one
+        if (container.parentNode) {
+          container.parentNode.replaceChild(newElement, container);
+          print(`[Renderer] Successfully re-rendered component`);
+        }
+      } catch (error) {
+        printError(`[Renderer] Error re-rendering component:`, error);
+      }
     });
 
-    try {
-      // Set current component being rendered
-      const prevComponent = currentComponent;
-      currentComponent = component;
+    // If we couldn't find the component by data attributes, use generic approach
+    if (instances.length === 0) {
+      print(
+        `[Renderer] No instances found by ID/name, using generic component update`
+      );
 
-      // Execute component with the same props to get fresh output
-      const renderedOutput = component(vnode.props || {});
+      // Generic approach: Find any component with state changes
+      const componentContainers = document.querySelectorAll(
+        "[data-elux-component]"
+      );
+      if (componentContainers.length > 0) {
+        print(
+          `[Renderer] Found ${componentContainers.length} generic components to check`
+        );
 
-      // Reset current component
-      currentComponent = prevComponent;
-
-      // Now create a DOM element from the rendered output
-      const newElement = createDOMElement(renderedOutput);
-      print(`Created new DOM element:`, newElement);
-
-      // Find the existing element in the DOM
-      if (vnode._el && vnode._el.parentElement) {
-        print(`Replacing existing element in DOM`);
-        vnode._el.parentElement.replaceChild(newElement, vnode._el);
-
-        // Update element reference
-        newVNode._el = newElement;
-      } else if (container) {
-        print(`Appending new element to container`);
-        // Clear container at index
-        const oldElement = container.children[index];
-        if (oldElement) {
-          container.replaceChild(newElement, oldElement);
-        } else {
-          container.appendChild(newElement);
-        }
-
-        // Update element reference
-        newVNode._el = newElement;
-      }
-
-      print(`Component re-rendered successfully`);
-    } catch (error) {
-      printError(`Error during component re-render:`, error);
-    }
-  } else {
-    printWarn(`No component data found for re-render:`, component.name);
-
-    // Attempt to find any existing component in the DOM with the same name
-    if (typeof document !== "undefined") {
-      const possibleElements = document.querySelectorAll(".card-default");
-      if (possibleElements.length > 0) {
-        print(`Found ${possibleElements.length} possible elements to refresh`);
-
-        // Re-render the component with empty props as fallback
-        try {
-          const prevComponent = currentComponent;
-          currentComponent = component;
-
-          const renderedOutput = component({});
-          currentComponent = prevComponent;
-
-          const newElement = createDOMElement(renderedOutput);
-
-          // Try to replace the first matching element
-          if (possibleElements[0].parentElement) {
-            possibleElements[0].parentElement.replaceChild(
-              newElement,
-              possibleElements[0]
-            );
-            print(`Replaced element as fallback`);
+        // For each component container, dispatch a state change event
+        componentContainers.forEach((container) => {
+          if (
+            container.getAttribute("data-component-name") === component.name ||
+            container.getAttribute("data-elux-component") ===
+              component.name.toLowerCase()
+          ) {
+            // Dispatch an event that the component can listen to
+            const event = new CustomEvent("elux-state-changed", {
+              bubbles: true,
+              detail: {
+                componentName: component.name,
+                timestamp: Date.now(),
+              },
+            });
+            container.dispatchEvent(event);
           }
-        } catch (fallbackError) {
-          printError(`Fallback re-render failed:`, fallbackError);
-        }
+        });
       }
     }
+  } catch (error) {
+    printError("[Renderer] General error in reRenderComponent:", error);
+  }
+}
+
+/**
+ * Helper function to update components generically through event system
+ * This avoids having to write component-specific code in the renderer
+ */
+export function notifyComponentUpdate(componentName: string, data?: any): void {
+  if (typeof document === "undefined") return;
+
+  try {
+    const event = new CustomEvent("elux-component-update", {
+      bubbles: true,
+      detail: { componentName, data, timestamp: Date.now() },
+    });
+
+    window.dispatchEvent(event);
+
+    print(`[Renderer] Notified update for component: ${componentName}`);
+  } catch (e) {
+    // Ignore errors in this helper function
   }
 }
 
@@ -240,9 +375,27 @@ function createDOMElement(vnode: VNode): Element | Text {
         } else if (key.startsWith("on") && typeof value === "function") {
           const eventName = key.substring(2).toLowerCase();
           el.addEventListener(eventName, value);
-        } else if (key !== "children") {
-          el.setAttribute(key, String(value));
+        } else if (
+          key !== "children" &&
+          key !== "_elux_component_id" &&
+          key !== "_elux_component_type"
+        ) {
+          // Skip internal Elux props
+          if (value !== null && value !== undefined && value !== false) {
+            el.setAttribute(key, String(value));
+          }
         }
+      }
+
+      // Add component data attributes if this is a component container
+      if (vnode.props._elux_component_id) {
+        el.setAttribute("data-component-id", vnode.props._elux_component_id);
+      }
+      if (vnode.props._elux_component_type) {
+        el.setAttribute(
+          "data-component-type",
+          vnode.props._elux_component_type
+        );
       }
     }
 
@@ -266,8 +419,11 @@ function createDOMElement(vnode: VNode): Element | Text {
 
     if (vnode.children) {
       for (const child of vnode.children) {
-        const childEl = createDOMElement(child);
-        fragment.appendChild(childEl);
+        if (child) {
+          // Skip null/undefined children
+          const childEl = createDOMElement(child);
+          fragment.appendChild(childEl);
+        }
       }
     }
 
@@ -277,22 +433,141 @@ function createDOMElement(vnode: VNode): Element | Text {
 
   if (vnode.type === VNodeType.COMPONENT) {
     try {
-      // Get the component function
+      // Get the component function and metadata
       const componentFn = vnode.tag as Function;
 
       // Set current component being rendered for signal tracking
-      const prevComponent = currentComponent;
-      currentComponent = componentFn;
+      currentlyRenderingComponent = componentFn;
 
-      // Call the component function with its props to get rendered output
-      const renderedOutput = componentFn(vnode.props || {});
+      // Get component metadata to handle client/server components
+      let componentOutput;
+
+      try {
+        // Try to get metadata for client/server component handling
+        const meta = getComponentMeta(componentFn);
+        print(
+          `Rendering component: ${componentFn.name || "Anonymous"} (type: ${
+            meta.type
+          })`
+        );
+
+        // For client-only components, check if we're on client
+        if (meta.clientOnly && typeof window === "undefined") {
+          print(
+            `Client-only component ${componentFn.name} rendered on server - using placeholder`
+          );
+          const placeholderEl = document.createElement("div");
+          placeholderEl.setAttribute("data-elux-component", "client");
+          placeholderEl.setAttribute(
+            "data-component-name",
+            componentFn.name || "Anonymous"
+          );
+          placeholderEl.setAttribute(
+            "data-component-id",
+            meta.instanceId || "unknown"
+          );
+          placeholderEl.textContent = `Client component placeholder: ${
+            componentFn.name || "Anonymous"
+          }`;
+          return placeholderEl;
+        }
+
+        // Now call the component function with its props to get rendered output
+        componentOutput = componentFn(vnode.props || {});
+
+        // Check if componentOutput is null or undefined and provide a fallback
+        if (componentOutput === null || componentOutput === undefined) {
+          printError(
+            `Component ${
+              componentFn.name || "Anonymous"
+            } returned null or undefined - providing fallback element`
+          );
+
+          // Create a fallback element instead of failing
+          componentOutput = createElement(
+            "div",
+            {
+              className: "elux-component-fallback",
+              style:
+                "padding: 10px; color: #666; background: #f9f9f9; border: 1px dashed #ccc;",
+            },
+            `Component ${
+              componentFn.name || "Anonymous"
+            } rendered empty content`
+          );
+        }
+      } catch (metaError) {
+        // If metadata system fails, fall back to direct component rendering
+        print(
+          `Component metadata system error: ${metaError}. Falling back to direct rendering.`
+        );
+
+        try {
+          componentOutput = componentFn(vnode.props || {});
+
+          // Check if componentOutput is null after fallback
+          if (componentOutput === null || componentOutput === undefined) {
+            printError(
+              `Component ${
+                componentFn.name || "Anonymous"
+              } returned null after metadata fallback - using fallback element`
+            );
+
+            // Create a fallback element instead of failing
+            componentOutput = createElement(
+              "div",
+              {
+                className: "elux-component-fallback",
+                style:
+                  "padding: 10px; color: #666; background: #f9f9f9; border: 1px dashed #ccc;",
+              },
+              `Component ${
+                componentFn.name || "Anonymous"
+              } rendered empty content`
+            );
+          }
+        } catch (renderError) {
+          printError(
+            `Error rendering component ${componentFn.name || "Anonymous"}:`,
+            renderError
+          );
+
+          // Return an error component if rendering fails
+          componentOutput = createElement(
+            "div",
+            {
+              className: "elux-error",
+              style: "color: red; padding: 10px; border: 1px solid red;",
+            },
+            `Error in component ${
+              componentFn.name || "Anonymous"
+            }: ${renderError}`
+          );
+        }
+      }
 
       // Reset current component
-      currentComponent = prevComponent;
+      currentlyRenderingComponent = null;
 
-      // Create DOM element from the rendered output
-      return createDOMElement(renderedOutput);
+      // Create DOM element from the component output
+      if (typeof componentOutput === "string") {
+        const textNode = document.createTextNode(componentOutput);
+        return textNode;
+      } else if (componentOutput) {
+        return createDOMElement(componentOutput);
+      } else {
+        // This shouldn't happen because we provide fallbacks above, but just in case
+        const placeholderEl = document.createElement("div");
+        placeholderEl.className = "elux-component-empty";
+        placeholderEl.textContent = `Component ${
+          componentFn.name || "Anonymous"
+        } rendered nothing`;
+        return placeholderEl;
+      }
     } catch (error) {
+      // Reset current component in case of error
+      currentlyRenderingComponent = null;
+
       // Create an error element to display component errors
       const errorEl = document.createElement("div");
       errorEl.className = "elux-error";
@@ -332,7 +607,10 @@ function createDOMElement(vnode: VNode): Element | Text {
   }
 
   // Handle unknown type fallback
-  throw new Error(`Unknown VNode type: ${vnode.type}`);
+  const errorEl = document.createElement("div");
+  errorEl.className = "elux-error";
+  errorEl.textContent = `Unknown VNode type: ${vnode.type}`;
+  return errorEl;
 }
 
 // Diff and patch the DOM
@@ -557,7 +835,7 @@ export function update(
 // JSX factory function
 export function h(
   tag: string | Function | symbol,
-  props: Record<string, any> | null,
+  props: Record<string, any> | null = null,
   ...children: (VNode | string | null | undefined)[]
 ): VNode {
   print("[Renderer] h function called with:", { tag, props, children });
@@ -567,7 +845,10 @@ export function h(
     return createFragment(children.filter(Boolean) as (VNode | string)[]);
   }
 
-  // Flatten children arrays
+  // Ensure valid props by defaulting to empty object
+  const validProps = props || {};
+
+  // Flatten children arrays and filter out null/undefined values
   const flattenedChildren: (VNode | string)[] = [];
   const flattenArray = (arr: any[]): void => {
     for (const item of arr) {
@@ -583,13 +864,43 @@ export function h(
 
   flattenArray(children);
 
-  const result =
-    typeof tag === "function"
-      ? createComponent(tag, props, ...flattenedChildren)
-      : createElement(tag as string, props, ...flattenedChildren);
+  // For function components, ensure we don't return null
+  if (typeof tag === "function") {
+    try {
+      // Get component metadata
+      let meta;
+      try {
+        meta = getComponentMeta(tag);
+      } catch (e) {
+        // If metadata lookup fails, continue without it
+      }
 
-  print("[Renderer] h function returning:", result);
-  return result;
+      // Create result using the createComponent function
+      const result = createComponent(tag, validProps, ...flattenedChildren);
+      print("[Renderer] h function returning for component:", result);
+      return result;
+    } catch (error) {
+      // If component creation fails, return an error element
+      printError(`Error creating component ${tag.name || "Anonymous"}:`, error);
+      return createElement(
+        "div",
+        {
+          className: "elux-error",
+          style: "color: red; padding: 10px; border: 1px solid red;",
+        },
+        `Error in component ${tag.name || "Anonymous"}: ${error}`
+      );
+    }
+  } else {
+    // Regular element - use createElement
+    const result = createElement(
+      tag as string,
+      validProps,
+      ...flattenedChildren
+    );
+    print("[Renderer] h function returning for element:", result);
+    return result;
+  }
 }
 
 // JSX-specific factory
@@ -694,4 +1005,32 @@ function unmountVNode(vnode: VNode): void {
   if (vnode._el && vnode._el.parentNode) {
     vnode._el.parentNode.removeChild(vnode._el);
   }
+}
+
+/**
+ * Hydrate the app with server-rendered content
+ * This reuses existing DOM nodes instead of replacing them
+ */
+export function hydrate(container: Element | string): void {
+  print("[Renderer] Hydrating with server-rendered content");
+
+  const containerElement =
+    typeof container === "string"
+      ? document.querySelector(container)
+      : container;
+
+  if (!containerElement) {
+    printError(`[Renderer] Hydration container not found: ${container}`);
+    return;
+  }
+
+  // We don't actually re-render, just set up event handlers and state
+  // This is a simplified version compared to a full hydration implementation
+
+  // For a real implementation, we would:
+  // 1. Create VNodes matching the DOM structure
+  // 2. Walk the DOM and attach events from the VNode props
+  // 3. Set up component state without replacing the DOM
+
+  print("[Renderer] Server-rendered content hydrated");
 }

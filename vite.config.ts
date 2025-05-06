@@ -76,7 +76,7 @@ function eluxFileRouterPlugin(): Plugin {
 
           if (routesChanged) {
             // Generate the routes file with safer dynamic imports
-          const file = `// Auto-generated routes file - DO NOT EDIT
+            const file = `// Auto-generated routes file - DO NOT EDIT
 // Using safer dynamic imports with error handling
 
 // Helper function to safely import routes with fallback
@@ -116,22 +116,22 @@ ${Object.entries(routes)
 };
 `;
 
-          // Ensure the directory exists
-          const routesFilePath = resolve("elux/routes.ts");
-          fs.writeFileSync(routesFilePath, file);
+            // Ensure the directory exists
+            const routesFilePath = resolve("elux/routes.ts");
+            fs.writeFileSync(routesFilePath, file);
 
             // Update the last routes
             lastRoutes = { ...routes };
 
-          // Only log in verbose mode
-          if (VERBOSE_LOGGING) {
+            // Only log in verbose mode
+            if (VERBOSE_LOGGING) {
               console.log(
                 `✅ Routes generated at ${routesFilePath} with ${
                   Object.keys(routes).length
                 } routes`
               );
-          } else {
-            process.stdout.write(".");
+            } else {
+              process.stdout.write(".");
             }
 
             // Force HMR update for routes file to notify clients

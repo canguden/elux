@@ -2,16 +2,13 @@
 import { h } from "../elux/core/vdom";
 import Link from "../elux/Link";
 import { eState } from "../elux/core/context";
+import { Counter } from "./components/Counter";
+import { Todo } from "./components/Todo";
+
 
 export default function HomePage() {
   // Use state hooks
-  const [getTitle] = eState<string>("title", "Welcome to Elux Framework");
-  const [getCount, setCount] = eState<number>("count", 0);
-
-  // Increment counter function
-  const incrementCount = () => {
-    setCount(getCount() + 1);
-  };
+  const [getTitle] = eState<string>("title", "Welcome to elux Framework");
 
   return (
     <div className="container mx-auto p-4">
@@ -22,6 +19,8 @@ export default function HomePage() {
             A TypeScript-first framework with file-based routing
           </p>
         </header>
+
+
 
         <section className="bg-gray100 p-6 rounded-lg shadow mb-8">
           <h2 className="text-2xl font-semibold mb-4">File-Based Routing</h2>
@@ -61,12 +60,10 @@ export default function HomePage() {
                 Docs
               </Link>
               <Link href="/test" className="btn btn-secondary">
-                Test
+                Test 404
               </Link>
             </div>
           </div>
-
-        
 
           <div className="bg-gray100 p-6 rounded-lg shadow">
             <h2 className="text-2xl font-semibold mb-4">State Management</h2>
@@ -74,16 +71,17 @@ export default function HomePage() {
               Elux includes a simple but powerful state management system:
             </p>
             <div className="mb-4 flex justify-center">
-              <p className="text-primary text-lg font-bold mb-2">
-                Count: {getCount()}
-              </p>
-            </div>
-            <div className="flex justify-center">
-              <button onClick={incrementCount} className="btn btn-primary">
-                Increment Counter
-              </button>
+              <Counter />
             </div>
           </div>
+        </section>
+
+        <section className="bg-gray100 p-6 rounded-lg shadow mb-8">
+          <h2 className="text-2xl font-semibold mb-4">Client Components</h2>
+          <p className="mb-4">
+            Elux supports advanced client components with automatic hydration:
+          </p>
+          <Todo title="Home Tasks" />
         </section>
 
         <section className="bg-gray100 p-6 rounded-lg shadow">
@@ -97,6 +95,7 @@ export default function HomePage() {
             </li>
             <li className="mb-2">Nested layouts support</li>
             <li className="mb-2">404 page handling for missing routes</li>
+            <li className="mb-2">Client/Server component architecture</li>
           </ul>
         </section>
       </div>

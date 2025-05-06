@@ -60,7 +60,7 @@ export function createElement(
   };
 }
 
-// Create a component VNode
+// Modified component VNode creation to support client/server components
 export function createComponent(
   component: Function,
   props: Record<string, any> | null = null,
@@ -89,6 +89,16 @@ export function createComponent(
   if (processedChildren.length > 0) {
     finalProps.children = processedChildren;
   }
+
+  // Generate a stable component ID if one doesn't exist
+  const componentId =
+    finalProps._elux_component_id ||
+    `${component.name || "component"}-${Math.random()
+      .toString(36)
+      .substring(2, 10)}`;
+
+  // Add component ID to props for state tracking
+  finalProps._elux_component_id = componentId;
 
   return {
     type: VNodeType.COMPONENT,
@@ -127,7 +137,7 @@ export function createFragment(
 // Fragment symbol for JSX
 export const Fragment = Symbol("Fragment");
 
-// The h function for creating elements (used by JSX)
+// Modified h function to support client/server components
 export function h(
   tag: string | Function | symbol,
   props: Record<string, any> | null = null,
@@ -136,6 +146,16 @@ export function h(
   if (tag === Fragment) {
     return createFragment(children);
   } else if (typeof tag === "function") {
+    // Try to use our component system's createSmartComponent if available
+    try {
+      // Dynamic import to avoid circular dependencies
+      const components = require("./components");
+      if (components && typeof components.createSmartComponent === "function") {
+        return components.createSmartComponent(tag, props);
+      }
+    } catch (e) {
+      // Fallback to regular component creation if components module not available
+    }
     return createComponent(tag, props, ...children);
   } else {
     return createElement(tag as string, props, ...children);

@@ -52,7 +52,7 @@ export function initRouter(elementSelector: string = "#app") {
 /**
  * Set up navigation event handlers
  */
-function setupNavigation() {
+export function setupNavigation() {
   if (typeof window === "undefined") return;
 
   // Handle popstate (browser back/forward)
@@ -63,6 +63,16 @@ function setupNavigation() {
 
   print("[FileRouter] Navigation handlers set up");
 }
+
+/**
+ * Export the setupNavigation function with a different name for client.ts
+ */
+export const setupLinkHandling = setupNavigation;
+
+/**
+ * Export the initRouter function with a different name for client.ts
+ */
+export const initHistory = initRouter;
 
 /**
  * Navigate to a route
@@ -230,292 +240,165 @@ export async function renderCurrentRoute() {
 
   // Show loading indicator
   const loadingIndicator = document.createElement("div");
+  loadingIndicator.className = "loading-indicator";
   loadingIndicator.style.display = "flex";
   loadingIndicator.style.justifyContent = "center";
   loadingIndicator.style.alignItems = "center";
   loadingIndicator.style.height = "50vh";
 
   const spinner = document.createElement("div");
+  spinner.className = "spinner";
   spinner.style.width = "40px";
   spinner.style.height = "40px";
-  spinner.style.border = "4px solid #f3f3f3";
-  spinner.style.borderTop = "4px solid #3498db";
+  spinner.style.border = "4px solid rgba(0, 0, 0, 0.1)";
   spinner.style.borderRadius = "50%";
+  spinner.style.borderTopColor = "#3498db";
   spinner.style.animation = "spin 1s linear infinite";
 
-  const style = document.createElement("style");
-  style.textContent =
-    "@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}";
-
-  loadingIndicator.appendChild(spinner);
-  loadingIndicator.appendChild(style);
-
-  // Only clear content and show loading if not the initial SSR render
-  if (rootElement.dataset.hydrated === "true") {
-    print("[FileRouter] Clearing content and showing loading indicator");
-    rootElement.innerHTML = "";
-    rootElement.appendChild(loadingIndicator);
-  } else {
-    // Mark as hydrated for future navigations
-    print("[FileRouter] First render, marking as hydrated");
-    rootElement.dataset.hydrated = "true";
+  // Add keyframes for spinner animation if not already in the document
+  if (!document.getElementById("spinner-keyframes")) {
+    const style = document.createElement("style");
+    style.id = "spinner-keyframes";
+    style.textContent = `
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
   }
 
+  loadingIndicator.appendChild(spinner);
+
+  // Clear root element and add loading indicator
+  rootElement.innerHTML = "";
+  rootElement.appendChild(loadingIndicator);
+
   try {
-    // Find the correct route
-    const normalizedPath = normalizePath(pathname);
-    const { route: matchedRoute, params } = getRouteAndParams(
-      normalizedPath,
-      typedRoutes
-    );
+    // Find the matching route
+    const { route, params } = getRouteAndParams(pathname, typedRoutes);
+    print(`[FileRouter] Route match result:`, { route, params });
 
-    let routePath = matchedRoute;
+    // Handle 404 for routes that don't exist
+    if (!route) {
+      print(`[FileRouter] No route found for ${pathname}, showing 404 page`);
 
-    // Handle not found routes
-    if (!routePath) {
-      print("[FileRouter] No route matched, handling 404");
-      // Try notfound page
-      if (typedRoutes["/notfound"]) {
-        print("[FileRouter] Using /notfound page");
-        routePath = "/notfound";
-        params.path = normalizedPath;
-        // Don't redirect the URL - keep showing the actual URL that wasn't found
-        // This fixes the confusion where the URL shows one thing but the content is from another URL
-      } else {
-        // No notfound page available, show inline error
-        print("[FileRouter] No notfound page available, showing inline error");
-        rootElement.innerHTML = `
-          <div style="padding: 20px; margin: 20px; border: 1px solid #f44336; border-radius: 4px;">
-            <h1 style="color: #f44336;">Page Not Found</h1>
-            <p>The requested route "${normalizedPath}" does not exist.</p>
-            <p>Please create a <code>/app/notfound.tsx</code> page for better error handling.</p>
-            <div style="margin-top: 20px;">
-              <a href="/" style="color: #0066cc; text-decoration: underline;">Go to Home Page</a>
-            </div>
-          </div>
-        `;
-        return;
-      }
-    }
+      try {
+        // Try to load the not-found page if available
+        if (typedRoutes["/notfound"]) {
+          const notFoundModule = await typedRoutes["/notfound"]();
+          const NotFoundPage = notFoundModule.default;
 
-    // Load page component
-    let PageComponent = null;
-    let loadError = null;
-    try {
-      // Use cached component if available to avoid unnecessary reloads
-      if (componentCache[routePath]) {
-        print(`[FileRouter] Using cached component for route: ${routePath}`);
-        PageComponent = componentCache[routePath];
-      } else {
-        print(`[FileRouter] Loading component for route: ${routePath}`);
-        print(`[FileRouter] Import function:`, typedRoutes[routePath]);
-
-        // For client navigation to non-existent routes (like /test)
-        if (!typedRoutes[routePath] && routePath !== "/notfound") {
-          print(
-            `[FileRouter] No import function found for route: ${routePath}`
-          );
-          // Force using the notfound page
-          if (typedRoutes["/notfound"]) {
-            print(`[FileRouter] Falling back to /notfound page`);
-            try {
-              const notfoundModule = await typedRoutes["/notfound"]();
-              if (notfoundModule && notfoundModule.default) {
-                print(`[FileRouter] Successfully loaded notfound page`);
-                PageComponent = notfoundModule.default;
-                // Add path param to make it clear what path was not found
-                params.path = normalizedPath;
-              } else {
-                throw new Error("Notfound module has no default export");
-              }
-            } catch (error) {
-              printError(`[FileRouter] Failed to load notfound page:`, error);
-              throw error;
-            }
+          if (NotFoundPage) {
+            // Render the not-found page
+            mount(h(NotFoundPage, { path: pathname }), rootElement);
           } else {
-            throw new Error(
-              `Route ${routePath} not found and no notfound page available`
-            );
+            rootElement.innerHTML = `
+              <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
+                <h1>Page Not Found</h1>
+                <p>The page at <code>${pathname}</code> does not exist.</p>
+                <p><a href="/">Go Home</a></p>
+              </div>
+            `;
           }
         } else {
-          try {
-            print(`[FileRouter] Loading module for route: ${routePath}`);
-            const pageModule = await typedRoutes[routePath]();
-            print(`[FileRouter] Page module loaded:`, pageModule);
-
-            PageComponent = pageModule.default;
-            print(`[FileRouter] Page component:`, PageComponent);
-
-            if (!PageComponent) {
-              throw new Error(`No default export for ${routePath}`);
-            }
-          } catch (error) {
-            printError(`[FileRouter] Error loading page module:`, error);
-            throw error;
-          }
+          // Fallback 404 if no not-found page exists
+          rootElement.innerHTML = `
+            <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
+              <h1>Page Not Found</h1>
+              <p>The page at <code>${pathname}</code> does not exist.</p>
+              <p><a href="/">Go Home</a></p>
+            </div>
+          `;
         }
-
-        // Cache the component for future use
-        print(`[FileRouter] Caching component for route: ${routePath}`);
-        componentCache[routePath] = PageComponent;
-      }
-    } catch (error: any) {
-      printError("[FileRouter] Error loading page component:", error);
-      loadError = error;
-
-      // Try to use notfound page if available
-      if (typedRoutes["/notfound"] && routePath !== "/notfound") {
-        try {
-          print(`[FileRouter] Attempting to load notfound page after error`);
-          const notfoundModule = await typedRoutes["/notfound"]();
-          PageComponent = notfoundModule.default;
-          // Add path param to make it clear what path had an error
-          params.path = normalizedPath;
-        } catch (notfoundError) {
-          // If even the notfound page fails, show a basic error message
-          printError(
-            "[FileRouter] Failed to load notfound page:",
-            notfoundError
-          );
-        }
-      }
-
-      // If we couldn't load the notfound page or any component, show error message
-      if (!PageComponent) {
+      } catch (error) {
+        printError("[FileRouter] Error loading not-found page:", error);
         rootElement.innerHTML = `
-          <div style="padding: 20px; margin: 20px; border: 1px solid #f44336; border-radius: 4px;">
-            <h1 style="color: #f44336;">Error Loading Page</h1>
-            <p>${error?.message || "Unknown error"}</p>
-            <pre style="background: #f5f5f5; padding: 10px; margin-top: 10px; overflow: auto;">${
-              error?.stack || ""
-            }</pre>
+          <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>Page Not Found</h1>
+            <p>The page at <code>${pathname}</code> does not exist.</p>
+            <p><a href="/">Go Home</a></p>
           </div>
         `;
-        return;
       }
+
+      return;
     }
 
-    // Load layout component
-    let LayoutComponent = null;
-    try {
-      // Try specific layout for this route first
-      const routeDir = routePath.split("/").slice(0, -1).join("/");
-      print(`[FileRouter] Looking for layout for route: ${routeDir || "/"}`);
+    // Load the route module
+    print(`[FileRouter] Loading route module for ${route}`);
+    const routeModule = await typedRoutes[route]();
 
-      // Use cached layout if available
-      if (layoutCache[routePath]) {
-        print(`[FileRouter] Using cached layout for route: ${routePath}`);
-        LayoutComponent = layoutCache[routePath];
-      } else {
-        try {
-          // Try to find the most specific layout by walking up the path
-          const layoutParts = normalizedPath.split("/").filter(Boolean);
-          let layoutPath = "";
-
-          // Import the top-level layout first as fallback
-          try {
-            print("[FileRouter] Trying to load root layout: ../../app/layout");
-            const rootLayoutModule = await import("../../app/layout.tsx");
-            print("[FileRouter] Root layout module loaded:", rootLayoutModule);
-            LayoutComponent = rootLayoutModule.default;
-            print("[FileRouter] Root layout component:", LayoutComponent);
-          } catch (error) {
-            const err = error as Error;
-            print("[FileRouter] No root layout found:", err.message);
-            // No root layout, that's fine
-          }
-
-          // Try to find the most specific layout by walking up the path
-          for (let i = 0; i < layoutParts.length; i++) {
-            layoutPath = `/${layoutParts.slice(0, i + 1).join("/")}`;
-            try {
-              print(
-                `[FileRouter] Trying to load layout: ../../app${layoutPath}/layout`
-              );
-              // Use dynamic import with .tsx extension for JSX files
-              const layoutModule = await import(
-                `../../app${layoutPath}/layout.tsx`
-              );
-              if (layoutModule.default) {
-                // Found a more specific layout
-                print(
-                  `[FileRouter] Found more specific layout at: ${layoutPath}/layout`
-                );
-                LayoutComponent = layoutModule.default;
-              }
-            } catch (error) {
-              const err = error as Error;
-              // No layout at this level, continue with the previous one
-              print(`[FileRouter] No layout at: ${layoutPath}/layout`);
-            }
-          }
-
-          // Cache the resolved layout
-          if (LayoutComponent) {
-            print(`[FileRouter] Caching layout for route: ${routePath}`);
-            layoutCache[routePath] = LayoutComponent;
-          }
-        } catch (error: any) {
-          printError("[FileRouter] Error loading layout:", error);
-          // Continue without layout
-        }
-      }
-    } catch (error: any) {
-      printError("[FileRouter] Error loading layout:", error);
-      // Continue without layout
-    }
-
-    // Render the page
-    print(`[FileRouter] Rendering page component for route: ${routePath}`);
-    print(
-      `[FileRouter] Layout component:`,
-      LayoutComponent ? "Found" : "Not Found"
-    );
-    print(
-      `[FileRouter] Page component:`,
-      PageComponent ? "Found" : "Not Found"
-    );
-
-    // For notfound page, make extra effort to get layout if not already found
-    if (routePath === "/notfound" && !LayoutComponent) {
-      try {
-        print("[FileRouter] Specially loading root layout for notfound page");
-        const rootLayoutModule = await import("../../app/layout.tsx");
-        if (rootLayoutModule.default) {
-          LayoutComponent = rootLayoutModule.default;
-          print(
-            "[FileRouter] Successfully loaded root layout for notfound page"
-          );
-        }
-      } catch (layoutError) {
-        printError(
-          "[FileRouter] Error loading root layout for notfound:",
-          layoutError
-        );
-      }
-    }
-
-    if (LayoutComponent) {
-      print("[FileRouter] Mounting with layout");
-      mount(
-        h(LayoutComponent, { params }, h(PageComponent, { params })),
-        rootElement
+    // Check if we actually got a module and it has a default export
+    if (!routeModule || !routeModule.default) {
+      printError(
+        `[FileRouter] Route module for ${route} doesn't have a default export`
       );
-    } else {
-      print("[FileRouter] Mounting without layout");
-      mount(h(PageComponent, { params }), rootElement);
+      rootElement.innerHTML = `
+        <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
+          <h1>Route Loading Error</h1>
+          <p>The page at <code>${pathname}</code> could not be loaded properly.</p>
+          <p><a href="/">Go Home</a></p>
+        </div>
+      `;
+      return;
     }
 
-    print(`[FileRouter] Route rendered: ${routePath}`);
-  } catch (error: any) {
-    printError("[FileRouter] Fatal router error:", error);
+    // Get the page component
+    const PageComponent = routeModule.default;
+    print(`[FileRouter] Loaded page component for ${route}`);
+
+    // Remove the loading indicator
+    const loadingElem = rootElement.querySelector(".loading-indicator");
+    if (loadingElem) {
+      rootElement.removeChild(loadingElem);
+    }
+
+    // Create props including params and any getStaticProps/getServerSideProps data
+    const props = { params, ...params };
+
+    try {
+      // Render the page component
+      if (typeof PageComponent === "function") {
+        // If it's a component function, render it
+        mount(h(PageComponent, props), rootElement);
+        print(`[FileRouter] Mounted page component for ${route}`);
+      } else {
+        // Handle non-function components
+        printError(
+          `[FileRouter] Page component for ${route} is not a function:`,
+          PageComponent
+        );
+        rootElement.innerHTML = `
+          <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>Page Error</h1>
+            <p>The page at <code>${pathname}</code> couldn't be rendered.</p>
+            <p><a href="/">Go Home</a></p>
+          </div>
+        `;
+      }
+    } catch (renderError) {
+      printError(
+        `[FileRouter] Error rendering page for ${route}:`,
+        renderError
+      );
+      rootElement.innerHTML = `
+        <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
+          <h1>Rendering Error</h1>
+          <p>An error occurred while rendering the page at <code>${pathname}</code>.</p>
+          <p><pre>${renderError}</pre></p>
+          <p><a href="/">Go Home</a></p>
+        </div>
+      `;
+    }
+  } catch (error) {
+    // Handle any errors that occurred during route handling
+    printError("[FileRouter] Error rendering route:", error);
     rootElement.innerHTML = `
-      <div style="padding: 20px; margin: 20px; border: 1px solid #f44336; border-radius: 4px;">
-        <h1 style="color: #f44336;">Router Error</h1>
-        <p>${error?.message || "Unknown error"}</p>
-        <pre style="background: #f5f5f5; padding: 10px; margin-top: 10px; overflow: auto;">${
-          error?.stack || ""
-        }</pre>
+      <div style="padding: 2rem; max-width: 600px; margin: 0 auto;">
+        <h1>Routing Error</h1>
+        <p>An error occurred while loading the page at <code>${pathname}</code>.</p>
+        <p><pre>${error}</pre></p>
+        <p><a href="/">Go Home</a></p>
       </div>
     `;
   }
